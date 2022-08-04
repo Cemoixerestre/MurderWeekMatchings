@@ -112,9 +112,10 @@ Conflict = Tuple[int, Optional[Constraint]]
 OVERLAPPING_ACTIVITY: Conflict = (1, None)
 def broken_constraint_conflict(constraint: Constraint) -> Conflict:
     return (2, constraint)
-BLACKLIST = (3, None)
+BLACKLIST: Conflict = (3, None)
+FULL: Conflict = (4, None)
 
-CONFLICT_NAMES = ["organizing", "overlapping", "constraint", "blacklist"]
+CONFLICT_NAMES = ["organizing", "overlapping", "constraint", "blacklist", "full"]
 def conflict_repr(c: Conflict) -> str:
     data = [CONFLICT_NAMES[c[0]]]
     if c[1] is not None:
@@ -130,7 +131,6 @@ class Player:
                  wishes: List[Activity],
                  non_availabilities: List[TimeSlot],
                  max_activities: Optional[int] = None,
-                 blacklist: Optional[List[Player]] = None,
                  constraints: Optional[Set[Constraint]] = None,
                  orga_player_same_day: bool = True):
         # Auto number the players
@@ -141,10 +141,10 @@ class Player:
         self.wishes = wishes
         self.non_availability: List[TimeSlot] = non_availabilities
         self.max_activities = max_activities
-        self.blacklist: List[Player] = blacklist if blacklist is not None else []
         self.constraints: Set[Constraint] = constraints if constraints is not None else set()
         self.orga_player_same_day = orga_player_same_day
 
+        self.blacklist: List[Player] = []
         self.activities: List[Activity] = []
         self.organizing: List[Activity] = []
 
@@ -160,11 +160,24 @@ class Player:
         #    return ORGANIZING_ACTIVITY
         if any(activity.overlaps(other.start, other.end) for other in self.activities):
             return OVERLAPPING_ACTIVITY
-        # TODO: take into account the blacklists
+        elif any(p for p in activity.players if p in self.blacklist):
+            return BLACKLIST
+        elif activity.is_full():
+            return FULL
         else:
             return None
 
-    def filter_availability(self, verbose:bool = False) -> None:        
+    def filter_availability(self, verbose:bool = False) -> None:
+        """Function called at the beginning to filter impossible wishes.
+        
+        It filters out wishes where the player in unavailable, when it
+        overlaps with the organization of a game, or wishes the same day
+        as an orginazition (when the player asked not to participate
+        and organize the same day).
+        
+        This procedure is called once after the initialization of players
+        and activities.
+        """
         if not self.orga_player_same_day:
             activity_when_orga = [a for a in self.wishes for o in self.organizing
                                   if a.start.date() == o.start.date()]
@@ -179,7 +192,7 @@ class Player:
         organizing = [a for a in self.wishes for o in self.organizing
                        if a.overlaps(o.start, o.end)]
         if verbose and organizing:
-            print("Found wishes where organizing :")
+            print("Found wishes when organizing :")
             for a in set(organizing):
                 print(f"- {a}")
 
@@ -198,42 +211,54 @@ class Player:
             self.wishes.remove(a)
 
     def update_wishlist(self, verbose:bool = False) -> None:
+        """Remove impossible wishes.
+        
+        This corresponds to activities with a conflict (see the
+        method `conflict_with` and full activities.
+        
+        This function is called after each attribution pass.
+        """
         conflicts = [(a, self.conflict_with(a)) for a in self.wishes]
         conflicts = [(a, c) for (a, c) in conflicts if c is not None]
-
         if verbose and conflicts:
-            print("Removed conflicting wishes :")
-            for (a, c) in set(conflicts):
+            print(f"Player {self.name}: removed conflicting wishes :")
+            for (a, c) in conflicts:
                 print(f"- {a} ({conflict_repr(c)})")
-
-        for (a, _) in set(conflicts):
+        for (a, _) in conflicts:
             self.wishes.remove(a)
 
     def __repr__(self):
         return f"{self.id} | {self.name}"
 
     def could_play(self, activity: Activity) -> bool:
+        """TODO: rewrite, maybe reusing some code."""
         if (self.max_activities is not None) and (len(self.activities) >= self.max_activities):
             assert(len(self.activities == self.max_activities))
             return False
+        
+        #self.update_wishlist()
+        #return activity in self.wishes
 
         return not(any(activity.overlaps(ts.start, ts.end) for ts in self.non_availability)
                    or self.conflict_with(activity) is not None)
 
     def remove_wish(self, activity: Activity) -> None:
         self.wishes = [a for a in self.wishes if a != activity]
+    
+    def remove_wishes_by_name(self, name: str) -> None:
+        """Remove all wishes corresponding to some name."""
+        self.wishes = [a for a in self.wishes if a.name != name]
 
     def has_wishes(self) -> bool:
         return len(self.wishes) > 0
 
     def add_activity(self, activity: Activity, verbose=False) -> None:
         self.activities.append(activity)
-        self.remove_wish(activity)
+        self.remove_wishes_by_name(activity.name)
 
         # remove conflicting wishes
-        self.update_wishlist(verbose=verbose)
-        # Remove activities with the same name
-        self.wishes = [a for a in self.wishes if a.name != activity.name]
+        # MOVED: activities are removed at the end of the assignation pass
+        # self.update_wishlist(verbose=verbose)
 
         # If we reached the max number of activities, empty the wishlist
         if self.max_activities is not None and len(self.activities) >= self.max_activities:
@@ -242,12 +267,18 @@ class Player:
 
     def remove_activity(self, activity: Activity) -> None:
         if activity not in self.activities:
-            print(f"Can't remove activity {activity.name} from {self.name}. They were not selected to be part of it")
+            print(f"Can't remove activity {activity.name} from {self.name}. "
+                   "They were not selected to be part of it")
             return
         self.activities.remove(activity)
 
     def add_blacklist_player(self, player: Player) -> None:
+        """Create a blacklist conflict between two players."""
+        # The blacklist conflict is symmetrical. We don't care
+        # who is blacklisting who, in the end, the only thing
+        # that matters is that two players cannot play together.
         self.blacklist.append(player)
+        player.blacklist.append(self)
 
     def is_last_chance(self):
         """If the player has not been cast yet and only one wish remains"""
@@ -257,17 +288,19 @@ class Player:
         return self.wishes.index(activity)
 
     def possible_wishes(self) -> List[Activity]:
-        # Remove activities that are full
-        w = [a for a in self.wishes if not a.is_full()]
-        # remove activities with bl conflict
-        # Remove activities where there is a target already casted
-        for player_bl in self.blacklist:
-            w = [a for a in w if player_bl not in a.players]
+        ## Remove activities that are full
+        #w = [a for a in self.wishes if not a.is_full()]
+        ## remove activities with bl conflict
+        ## Remove activities where there is a target already casted
+        #for player_bl in self.blacklist:
+        #    w = [a for a in w if player_bl not in a.players]
 
         # Remove activities where someone in the cast blacklisted us
-        w = [a for a in w if not any([self in p.blacklist for p in a.players])]
+        #w = [a for a in w if not any([self in p.blacklist for p in a.players])]
 
-        return w
+        #return w
+        
+        return self.wishes.copy()
 
 
 class Matching:
@@ -296,25 +329,21 @@ class Matching:
             raise ValueError(f"ERROR. Found no players with name {name}")
         return pl[0]
 
-    def cleanup(self) -> None:
-        while True:
-            # Find activities that are full
-            full_activities = [a for a in self.active_activities if a.is_full()]
-            # Remove them from the active list
-            for a in full_activities:
-                self.active_activities.remove(a)
-                self.done_activities.append(a)
+    def cleanup(self, verbose=False) -> None:
+        # Find activities that are full
+        full_activities = [a for a in self.active_activities if a.is_full()]
+        # Remove them from the active list
+        for a in full_activities:
+            self.active_activities.remove(a)
+            self.done_activities.append(a)
 
-            # If a player has no more possible wishes, remove it
-            new_inactive_players = [p for p in self.active_players if not p.has_wishes()]
-            for p in new_inactive_players:
-                self.done_players.append(p)
-                self.active_players.remove(p)
-
-            # If we modified some things, restart the cleanup procedure
-            # Else, break out of the loop and return
-            if not full_activities and not new_inactive_players:
-                return
+        # If a player has no more possible wishes, remove it
+        for p in self.active_players:
+            p.update_wishlist(verbose=verbose)
+        finished_players = [p for p in self.active_players if not p.has_wishes]
+        for p in finished_players:
+            self.active_players.remove(p)
+            self.done_players.append(p)
 
     def assign_activity(self, player: Player, activity: Activity, verbose=False) -> None:
         # First check if activity has room left
@@ -329,19 +358,13 @@ class Matching:
                 print(f"Could not give {activity.name} to {player.name} because of some blacklist conflict")
                 return
 
-        # Check if someone in the cast blacklisted player
-        for p in activity.players:
-            if player in p.blacklist:
-                print(f"Could not give {activity.name} to {player.name} because of some blacklist conflict")
-                return
-
         # Add the activity to the player cast list, and the player to the activity cast list
         print(f"Giving [{activity.name}] to {player.name}")
         player.add_activity(activity, verbose=verbose)
         activity.add_player(player)
 
-        # Then, cleanup full activities or players with no more wishes
-        self.cleanup()
+        ## Then, cleanup full activities or players with no more wishes
+        #self.cleanup()
 
     def _remove_from_activity(self, player: Player, activity: Activity) -> None:
         print(f"Removing {player.name} from the activity {activity.name}")
@@ -381,12 +404,6 @@ class Matching:
     def force_assign_activity_by_id(self, player_name: str, activity_id: int, verbose=False) -> None:
         self.assign_activity(self.find_player_by_name(player_name),
                              self.find_activity(activity_id), verbose=verbose)
-
-    def add_to_blacklist(self, playerA_name: str, playerB_name: str) -> None:
-        pA = self.find_player_by_name(playerA_name)
-        pB = self.find_player_by_name(playerB_name)
-        pA.add_blacklist_player(pB)
-        pB.add_blacklist_player(pA)
 
     def cast_if_one_wish(self, verbose=False) -> bool:
         """For each player that has no activity yet and only one possible remaining wish, try to give it to them.
@@ -465,6 +482,7 @@ class Matching:
 
     def print_activities_status(self) -> None:
         print("Activities with a full cast:")
+        self.done_activities.sort(key=lambda a: a.id)
         for a in self.done_activities:
             print(f"* {a}")
             for p in a.players:
@@ -472,6 +490,7 @@ class Matching:
             print("")
 
         print("Activities WITHOUT a full cast:")
+        self.active_activities.sort(key=lambda a: a.id)
         for a in self.active_activities:
             print(f"* {a}")
             for p in a.players:
@@ -498,12 +517,12 @@ class Matching:
         while True:
             print("Casting in priority the players with only one wish and no casts yet")
             while self.cast_if_one_wish():
-                self.cleanup()
+                self.cleanup(verbose=verbose)
 
             print("No more priority players. Now casting like usual")
             if not self.cast_with_hospital_residents(verbose=verbose):
                 break
-            self.cleanup()
+            self.cleanup(verbose=verbose)
         print("Done")
 
     def print_available_players(self) -> None:

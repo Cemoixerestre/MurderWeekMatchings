@@ -62,6 +62,7 @@ def load_activities_and_players(act_path: Path, players_path: Path) -> Tuple[Lis
                 wishes.extend(act)
 
         max_games = int(p['max_games']) if not pandas.isna(p['max_games']) else None
+        ideal_games = int(p['ideal_games']) if not pandas.isna(p['ideal_games']) else None
         blacklist[name] = str(p['blacklist']).strip().split(';')
         orga_player_same_day = not pandas.isna(p["Jouer et (co-)organiser dans la même journée"])
 
@@ -71,7 +72,7 @@ def load_activities_and_players(act_path: Path, players_path: Path) -> Tuple[Lis
         # Generate constraints
         constraints = set(cons for (col, cons) in Constraint.NAMES.items() if pandas.isna(p[col]))
 
-        players.append(Player(name, wishes, non_availabilities, max_activities=max_games,
+        players.append(Player(name, wishes, non_availabilities, max_activities=max_games, ideal_activities=ideal_games,
                               constraints=constraints, orga_player_same_day=orga_player_same_day))
 
     # Now that the players are created, populate the blacklists

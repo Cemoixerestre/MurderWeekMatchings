@@ -131,6 +131,7 @@ class Player:
                  wishes: List[Activity],
                  non_availabilities: List[TimeSlot],
                  max_activities: Optional[int] = None,
+                 ideal_activities: Optional[int] = None,
                  constraints: Optional[Set[Constraint]] = None,
                  orga_player_same_day: bool = True):
         # Auto number the players
@@ -141,6 +142,7 @@ class Player:
         self.wishes = wishes
         self.non_availability: List[TimeSlot] = non_availabilities
         self.max_activities = max_activities
+        self.ideal_activities = ideal_activities
         self.constraints: Set[Constraint] = constraints if constraints is not None else set()
         self.orga_player_same_day = orga_player_same_day
 
@@ -502,8 +504,14 @@ class Matching:
         print("Activities given to each player:")
         players = self.active_players + self.done_players
         players.sort(key=lambda p: p.name)
+        
+        less = 0 # number of players with less activities than ideal
+        ideal = 0 # number of players with the ideal number of activities
+        more = 0 # number of players with more activities than ideal
+        no_ideal = 0
         for p in self.active_players + self.done_players:
-            print(f"* {p.name} | Got {len(p.activities)} activities. Max {p.max_activities}")
+            print(f"* {p.name} | Got {len(p.activities)} activities. "
+                  f"Ideal {p.ideal_activities}. Max {p.max_activities}.")
             print("  + Activities")
             p.activities.sort(key=lambda a: a.start)
             for a in p.activities:
@@ -512,6 +520,24 @@ class Matching:
                 print("  + Also organizing the following activities:")
                 for a in p.organizing:
                     print(f"    - {a.name} | Start: {a.start}")
+            if p.ideal_activities is None:
+                no_ideal += 1
+            elif len(p.activities) < p.ideal_activities:
+                less += 1
+            elif len(p.activities) == p.ideal_activities:
+                ideal += 1
+            else:
+                more += 1
+        
+        nb_players = len(self.active_players) + len(self.done_players)
+        print( "Players with less activities than ideal:\t"
+              f"{less} (= {100 * less / nb_players}%)")
+        print( "Players ideal number of activities:\t"
+              f"{ideal} (= {100 * ideal / nb_players}%)")
+        print( "Players with more activities than ideal:\t"
+              f"{more} (= {100 * more / nb_players}%)")
+        print( "Players with no ideal number of activiies:\t"
+              f"{no_ideal} (= {100 * no_ideal / nb_players}%)")
 
     def solve(self, verbose=False) -> None:
         while True:

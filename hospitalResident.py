@@ -7,7 +7,7 @@ from matching.games import HospitalResident
 
 class HospitalResidentMatching(Matching):
     """Instantiate a hospital-resident procedure for the matching.
-    
+
     TODO: describe the algorithm."""
 
     def cast_if_one_wish(self, players: List[Player], verbose=False) -> List[Tuple[Player, Activity]]:
@@ -23,9 +23,9 @@ class HospitalResidentMatching(Matching):
 
         return assignation
 
-    def prepare_hospital_resident_dictionaries(self) -> Tuple[Dict, Dict, Dict]:
+    def prepare_hospital_resident_dictionaries(self, players: List[Player]) -> Tuple[Dict, Dict, Dict]:
         player_wishes: Dict[Player, List[Activity]] = {p: p.possible_wishes()
-                                                       for p in self.active_players}
+                                                       for p in players}
 
         capacities = {a: a.remaining_slots() for a in self.active_activities}
 
@@ -63,9 +63,8 @@ class HospitalResidentMatching(Matching):
         interested_players.sort(key=lambda p: (len(p.activities), p.activity_rank(activity)))
         return interested_players
 
-    def cast_with_hospital_residents(self, verbose=False) -> List[Tuple[Player, Activity]]:
-        player_wishes, activities_waiting_list, capacities = self.prepare_hospital_resident_dictionaries()
-
+    def cast_with_hospital_residents(self, players: List[Player], verbose=False) -> List[Tuple[Player, Activity]]:
+        player_wishes, activities_waiting_list, capacities = self.prepare_hospital_resident_dictionaries(players)
         game = HospitalResident.create_from_dictionaries(player_wishes, activities_waiting_list, capacities)
         match = game.solve(optimal="resident")
 
@@ -79,7 +78,7 @@ class HospitalResidentMatching(Matching):
                 player = self.find_player(p.name.id)
                 assignation.append((player, activity))
         return assignation
-    
+
     def assignation_pass(self, players: List[Player], verbose=False) -> List[Tuple[Player, Activity]]:
         print("Casting in priority the players with only one wish and no casts yet")
         cast_if_one_wish = self.cast_if_one_wish(players)
@@ -89,6 +88,6 @@ class HospitalResidentMatching(Matching):
             return cast_if_one_wish
 
         print("No more priority players. Now casting like usual")
-        assignation = self.cast_with_hospital_residents(verbose=verbose)
+        assignation = self.cast_with_hospital_residents(players, verbose=verbose)
         shuffle(assignation)
         return assignation

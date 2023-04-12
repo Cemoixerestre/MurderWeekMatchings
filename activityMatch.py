@@ -68,7 +68,7 @@ class Activity:
 
     def add_player(self, player: Player) -> None:
         self.players.append(player)
-    
+
     def add_orga(self, orga: Player) -> None:
         self.orgas.append(orga)
 
@@ -100,7 +100,7 @@ class Constraint:
         "Jouer trois jours consécutifs": THREE_CONSECUTIVE_DAYS,
         "Jouer plus de trois jours consécutifs": MORE_CONSECUTIVE_DAYS
     }
-    
+
     REPR = ["2 same day", "night then morning", "2 consecutive days",
             "3 consecutive days", "> 3 consecutive days"]
 
@@ -151,7 +151,7 @@ class Player:
 
     def add_orga(self, activity: Activity) -> None:
         self.organizing.append(activity)
-    
+
     def conflict_with(self, activity: Activity) -> Optional[Conflict]:
         """Returns true if there is any conflict between the player and the activity."""
         for c in self.constraints:
@@ -170,12 +170,12 @@ class Player:
 
     def filter_availability(self, verbose:bool = False) -> None:
         """Function called at the beginning to filter impossible wishes.
-        
+
         It filters out wishes where the player in unavailable, when it
         overlaps with the organization of a game, or wishes the same day
         as an orginazition (when the player asked not to participate
         and organize the same day).
-        
+
         This procedure is called once after the initialization of players
         and activities.
         """
@@ -189,7 +189,7 @@ class Player:
 
             for a in set(activity_when_orga):
                 self.wishes.remove(a)
-                
+
         organizing = [a for a in self.wishes for o in self.organizing
                        if a.overlaps(o.start, o.end)]
         if verbose and organizing:
@@ -213,10 +213,10 @@ class Player:
 
     def update_wishlist(self, verbose:bool = False) -> None:
         """Remove impossible wishes.
-        
+
         This corresponds to activities with a conflict (see the
         method `conflict_with` and full activities.
-        
+
         This function is called after each attribution pass.
         """
         conflicts = [(a, self.conflict_with(a)) for a in self.wishes]
@@ -236,7 +236,7 @@ class Player:
         if (self.max_activities is not None) and (len(self.activities) >= self.max_activities):
             assert(len(self.activities == self.max_activities))
             return False
-        
+
         #self.update_wishlist()
         #return activity in self.wishes
 
@@ -245,13 +245,18 @@ class Player:
 
     def remove_wish(self, activity: Activity) -> None:
         self.wishes = [a for a in self.wishes if a != activity]
-    
+
     def remove_wishes_by_name(self, name: str) -> None:
         """Remove all wishes corresponding to some name."""
         self.wishes = [a for a in self.wishes if a.name != name]
 
     def has_wishes(self) -> bool:
         return len(self.wishes) > 0
+
+    def is_satisfied(self) -> bool:
+        """True if the player has at least the ideal number of activities."""
+        return self.ideal_activities is not None and \
+               len(self.activities) >= self.ideal_activities
 
     def add_activity(self, activity: Activity, verbose=False) -> None:
         self.activities.append(activity)
@@ -289,18 +294,6 @@ class Player:
         return self.wishes.index(activity)
 
     def possible_wishes(self) -> List[Activity]:
-        ## Remove activities that are full
-        #w = [a for a in self.wishes if not a.is_full()]
-        ## remove activities with bl conflict
-        ## Remove activities where there is a target already casted
-        #for player_bl in self.blacklist:
-        #    w = [a for a in w if player_bl not in a.players]
-
-        # Remove activities where someone in the cast blacklisted us
-        #w = [a for a in w if not any([self in p.blacklist for p in a.players])]
-
-        #return w
-        
         return self.wishes.copy()
 
 
@@ -335,7 +328,13 @@ class Matching(metaclass=ABCMeta):
         self.active_players = players
         self.active_activities = activities
 
+        # Player with the ideal number of activities (but that could
+        # still play other activities).
+        self.satisfied_players: List[Player] = []
+        # Player with the maximal number of activities, or that could not play
+        # any other activity.
         self.done_players: List[Player] = []
+        # Full activities.
         self.done_activities: List[Activity] = []
 
     def find_activity(self, id: int) -> Activity:
@@ -347,11 +346,14 @@ class Matching(metaclass=ABCMeta):
             raise ValueError(f"ERROR. Found no activity with name {name}")
         return act
 
+    def all_players(self) -> List[Player]:
+        return self.active_players + self.satisfied_players + self.done_players
+
     def find_player(self, id: int) -> Player:
-        return [p for p in self.active_players + self.done_players if p.id == id][0]
+        return [p for p in self.all_players() if p.id == id][0]
 
     def find_player_by_name(self, name: str) -> Player:
-        pl = [p for p in self.active_players + self.done_players if p.name.lower() == name.lower()]
+        pl = [p for p in self.all_players() if p.name.lower() == name.lower()]
         if not pl:
             raise ValueError(f"ERROR. Found no players with name {name}")
         return pl[0]
@@ -365,12 +367,26 @@ class Matching(metaclass=ABCMeta):
             self.done_activities.append(a)
 
         # If a player has no more possible wishes, remove it
+        removed = []
         for p in self.active_players:
             p.update_wishlist(verbose=verbose)
-        finished_players = [p for p in self.active_players if not p.has_wishes]
-        for p in finished_players:
-            self.active_players.remove(p)
-            self.done_players.append(p)
+            if not p.has_wishes():
+                removed.append(p)
+                self.done_players.append(p)
+            elif p.is_satisfied():
+                removed.append(p)
+                self.satisfied_players.append(p)
+        self.active_players = [p for p in self.active_players
+                               if p not in removed]
+
+        removed = []
+        for p in self.satisfied_players:
+            p.update_wishlist(verbose=verbose)
+            if not p.has_wishes():
+                removed.append(p)
+                self.done_players.append(p)
+        self.satisfied_players = [p for p in self.satisfied_players
+                                  if p not in removed]
 
     def assign_activity(self, player: Player, activity: Activity, verbose=False) -> None:
         # First check if activity has room left
@@ -379,7 +395,6 @@ class Matching(metaclass=ABCMeta):
             return
 
         # Check potential blacklist conflicts with other players
-        # Check if someone in player's blacklist is already in the cast
         for p in player.blacklist:
             if p in activity.players:
                 print(f"Could not give {activity.name} to {player.name} because of some blacklist conflict")
@@ -449,14 +464,14 @@ class Matching(metaclass=ABCMeta):
 
     def print_players_status(self) -> None:
         print("Activities given to each player:")
-        players = self.active_players + self.done_players
+        players = self.all_players()
         players.sort(key=lambda p: p.name)
-        
+
         less = 0 # number of players with less activities than ideal
         ideal = 0 # number of players with the ideal number of activities
         more = 0 # number of players with more activities than ideal
         no_ideal = 0
-        for p in self.active_players + self.done_players:
+        for p in players:
             print(f"* {p.name} | Got {len(p.activities)} activities. "
                   f"Ideal {p.ideal_activities}. Max {p.max_activities}.")
             print("  + Activities")
@@ -475,24 +490,41 @@ class Matching(metaclass=ABCMeta):
                 ideal += 1
             else:
                 more += 1
-        
+
         nb_players = len(self.active_players) + len(self.done_players)
         print( "Players with less activities than ideal:\t"
-              f"{less} (= {100 * less / nb_players}%)")
+              f"{less} (= {100 * less / nb_players:.1f}%)")
         print( "Players with ideal number of activities:\t"
-              f"{ideal} (= {100 * ideal / nb_players}%)")
+              f"{ideal} (= {100 * ideal / nb_players:.1f}%)")
         print( "Players with more activities than ideal:\t"
-              f"{more} (= {100 * more / nb_players}%)")
+              f"{more} (= {100 * more / nb_players:.1f}%)")
         print( "Players with no ideal number of activities:\t"
-              f"{no_ideal} (= {100 * no_ideal / nb_players}%)")
+              f"{no_ideal} (= {100 * no_ideal / nb_players:.1f}%)")
 
     @abstractmethod
     def assignation_pass(self, players: List[Player], verbose=False) -> Dict[Player, Activity]:
         pass
-    
+
     def solve(self, verbose=False) -> None:
+        nb_pass = 0
         while True:
+            print(f"\nPass {nb_pass}")
+            nb_pass += 1
             assignation = self.assignation_pass(self.active_players, verbose=verbose)
+            if assignation == []:
+                break
+            for (player, activity) in assignation:
+                self.assign_activity(player, activity, verbose=verbose)
+            self.cleanup(verbose=verbose)
+
+        while True:
+            print(f"\nPass {nb_pass}: trying to fill the last activities "
+                   "with satisfied players.")
+            if verbose:
+                names = [p.name for p in self.satisfied_players]
+                print("Last players:", "; ".join(names))
+            nb_pass += 1
+            assignation = self.assignation_pass(self.satisfied_players, verbose=verbose)
             if assignation == []:
                 break
             for (player, activity) in assignation:

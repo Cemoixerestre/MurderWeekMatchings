@@ -542,3 +542,22 @@ class Matching(metaclass=ABCMeta):
             potential_players = [p for p in self.active_players + self.done_players
                                  if p.could_play(dummy_activity)]
             print(f"{s},{','.join([p.name for p in potential_players])}")
+
+    def nb_unfilled(self):
+        return len(self.active_activities)
+
+    def return_player_status(self) -> (Int, Int, Int, Int):
+        less = 0 # number of players with less activities than ideal
+        ideal = 0 # number of players with the ideal number of activities
+        more = 0 # number of players with more activities than ideal
+        no_ideal = 0
+        for p in self.all_players():
+            if p.ideal_activities is None:
+                no_ideal += 1
+            elif len(p.activities) < p.ideal_activities:
+                less += 1
+            elif len(p.activities) == p.ideal_activities:
+                ideal += 1
+            else:
+                more += 1
+        return (less, ideal, more, no_ideal)

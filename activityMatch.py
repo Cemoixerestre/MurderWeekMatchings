@@ -391,17 +391,20 @@ class Matching(metaclass=ABCMeta):
     def assign_activity(self, player: Player, activity: Activity, verbose=False) -> None:
         # First check if activity has room left
         if activity.is_full():
-            print(f"Tried to give [{activity.name}] to {player.name} but it is full.")
+            if verbose:
+                print(f"Tried to give [{activity.name}] to {player.name} but it is full.")
             return
 
         # Check potential blacklist conflicts with other players
         for p in player.blacklist:
             if p in activity.players:
-                print(f"Could not give {activity.name} to {player.name} because of some blacklist conflict")
+                if verbose:
+                    print(f"Could not give {activity.name} to {player.name} because of some blacklist conflict")
                 return
 
         # Add the activity to the player cast list, and the player to the activity cast list
-        print(f"Giving [{activity.name}] to {player.name}")
+        if verbose:
+            print(f"Giving [{activity.name}] to {player.name}")
         player.add_activity(activity, verbose=verbose)
         activity.add_player(player)
 

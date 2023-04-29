@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Tuple
 from activityMatch import Activity, Player, Constraint
 from timeSlots import generate_timeslots_from_column_names, WEEK_DAYS
 
-def load_activities_and_players(act_path: Path, players_path: Path) -> Tuple[List[Activity], List[Player]]:
+def load_activities_and_players(act_path: Path, players_path: Path, verbose=True) -> Tuple[List[Activity], List[Player]]:
     """Loading the activities and the players.
     
     The activities data must be in a .csv file with the following columns:
@@ -93,9 +93,10 @@ def load_activities_and_players(act_path: Path, players_path: Path) -> Tuple[Lis
                 player.add_orga(act)
 
     for player in players:
-        print(f"Processed player {player.name}")
-        player.filter_availability(verbose=True)
-        player.update_wishlist(verbose=True)
+        if verbose:
+            print(f"Processed player {player.name}")
+        player.filter_availability(verbose=verbose)
+        player.update_wishlist(verbose=verbose)
         
     return (activities, players)
 

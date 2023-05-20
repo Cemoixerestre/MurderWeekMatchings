@@ -79,7 +79,9 @@ CONSTRAINT_NAMES = {
 # DECAY to the power of the rank of the activity in the player's wishlist.
 # This formula, as well as this number, is completely arbitrary, it could be
 # tweaked.
-DECAY = 0.6
+# Experimentally, the best decay is between 0.3 and 0.5, but it may depend
+# on the instance.
+DECAY = 0.4
 
 class Player:
     ACTIVE_PLAYERS = 0
@@ -147,14 +149,12 @@ class Player:
         for a in set(organizing):
             self.wishes.remove(a)
 
-
         conflicting = [a for a in self.wishes for slot in self.non_availability
                        if a.overlaps(slot.start, slot.end)]
         if verbose and conflicting:
             print("Found wishes where not available :")
             for a in set(conflicting):
                 print(f"- {a}")
-
         for a in set(conflicting):
             self.wishes.remove(a)
 
@@ -176,9 +176,6 @@ class Player:
     def add_blacklist_player(self, player: Player) -> None:
         """Create a blacklist conflict between two players."""
         self.blacklist.append(player)
-
-    def activity_rank(self, activity: Activity) -> int:
-        return self.wishes.index(activity)
 
 
 class Matching:
@@ -260,7 +257,7 @@ class Matching:
                     for a, b in product(activities_by_days[day],
                                         activities_by_days[day + one_day]):
                         if b.end - a.start <= timedelta(hours=12):
-                            self.model += self.vars[p, a] + self.vars[p, b] <= 2
+                            self.model += self.vars[p, a] + self.vars[p, b] <= 1
             
         # Blacklist constraints:
         for p in self.players:
@@ -285,7 +282,7 @@ class Matching:
         return act
 
     def find_player(self, id: int) -> Player:
-        return [p for p in self.all_players() if p.id == id][0]
+        return [p for p in self.players if p.id == id][0]
 
     def find_player_by_name(self, name: str) -> Player:
         pl = [p for p in self.players if p.name.lower() == name.lower()]
@@ -417,9 +414,7 @@ class Matching:
                 p.activities.append(a)
                 a.players.append(p)
 
-    def nb_unfilled(self) -> Int:
-        return len(self.activities)
-
+    # TODO: unused. Keep it?
     def return_player_status(self) -> (Int, Int, Int):
         less = 0 # number of players with less activities than ideal
         ideal = 0 # number of players with the ideal number of activities

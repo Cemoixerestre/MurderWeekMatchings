@@ -2,7 +2,7 @@ from pathlib import Path
 import pandas
 from typing import List, Optional, Dict, Tuple
 
-from activityMatch import Activity, Player, Constraint
+from activityMatch import Activity, Player, CONSTRAINT_NAMES
 from timeSlots import generate_timeslots_from_column_names, WEEK_DAYS
 
 def load_activities_and_players(act_path: Path, players_path: Path, verbose=True) -> Tuple[List[Activity], List[Player]]:
@@ -61,8 +61,8 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
             else:
                 wishes.extend(act)
 
-        max_games = int(p['max_games']) if not pandas.isna(p['max_games']) else None
-        ideal_games = int(p['ideal_games']) if not pandas.isna(p['ideal_games']) else None
+        max_games = int(p['max_games']) if not pandas.isna(p['max_games']) else float("inf")
+        ideal_games = int(p['ideal_games']) if not pandas.isna(p['ideal_games']) else max_games
         blacklist[name] = str(p['blacklist']).strip().split(';')
         orga_player_same_day = not pandas.isna(p["Jouer et (co-)organiser dans la même journée"])
 
@@ -70,7 +70,7 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
         non_availabilities = [slot for (col, slot) in time_slots.items() if pandas.isna(p[col])]
 
         # Generate constraints
-        constraints = set(cons for (col, cons) in Constraint.NAMES.items() if pandas.isna(p[col]))
+        constraints = set(cons for (col, cons) in CONSTRAINT_NAMES.items() if pandas.isna(p[col]))
 
         players.append(Player(name, wishes, non_availabilities, max_activities=max_games, ideal_activities=ideal_games,
                               constraints=constraints, orga_player_same_day=orga_player_same_day))
@@ -96,7 +96,8 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
         if verbose:
             print(f"Processed player {player.name}")
         player.filter_availability(verbose=verbose)
-        player.update_wishlist(verbose=verbose)
+        # TODO: delete
+        # player.update_wishlist(verbose=verbose)
         
     return (activities, players)
 

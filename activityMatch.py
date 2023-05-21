@@ -26,6 +26,8 @@ class Activity:
         self.capacity: int = capacity
         self.start: datetime = start
         self.end: datetime = end
+        assert self.start < self.end, \
+               f"Activity {self.name} ends before it starts."
         # An ILP variable representing the number of players playing the
         # activity. It is bounded by the capacity.
         self.nb_players: Option[Var] = None
@@ -75,14 +77,6 @@ CONSTRAINT_NAMES = {
     "Jouer plus de trois jours consécutifs": MORE_CONSECUTIVE_DAYS
 }
 
-# If we give an activity to a player, the gain (also called coefficient) is
-# DECAY to the power of the rank of the activity in the player's wishlist.
-# This formula, as well as this number, is completely arbitrary, it could be
-# tweaked.
-# Experimentally, the best decay is between 0.3 and 0.5, but it may depend
-# on the instance.
-DECAY = 0.4
-
 class Player:
     ACTIVE_PLAYERS = 0
 
@@ -103,6 +97,9 @@ class Player:
         self.non_availability: List[TimeSlot] = non_availabilities
         self.max_activities = max_activities
         self.ideal_activities = ideal_activities
+        assert ideal_activities <= max_activities, \
+               f"Player {name}: the number of ideal activities is larger " \
+               f"than the maximal number of activities."
         self.constraints: Set[Constraint] = constraints if constraints is not None else set()
         self.orga_player_same_day = orga_player_same_day
         # A ILP variable representing the number of activities of the player.
@@ -167,8 +164,8 @@ class Player:
         self.nb_activities = model.add_var(var_type=INTEGER,
                                            ub=self.ideal_activities)
 
-    def activity_coef(self, activity: str) -> float:
-        return DECAY ** self.ranked_activity_names.index(activity.name)
+    def activity_coef(self, activity: str, decay: float) -> float:
+        return decay ** self.ranked_activity_names.index(activity.name)
 
     def __repr__(self):
         return f"{self.id} | {self.name}"
@@ -180,12 +177,14 @@ class Player:
 
 class Matching:
     """TODO"""
-    def __init__(self, players: List[Player], activities: List[Activity]):
+    def __init__(self, players: List[Player], activities: List[Activity],
+                 decay=0.5):
         self.players = players
         self.players.sort(key=lambda p: p.name)
         self.activities = activities
         self.model = Model()
         self.vars: Dict[Tuple(Player, Activity), Var] = {}
+        self.decay = decay
 
         for p in self.players:
             p.create_nb_activities_variable(self.model)
@@ -221,8 +220,9 @@ class Matching:
         # Time constaints:
         for p in self.players:
             activities_by_days = defaultdict(list)
-            for act in p.activities:
+            for act in p.wishes:
                 activities_by_days[act.start.date()].append(act)
+            days_played = list(activities_by_days.keys())
 
             one_day = timedelta(days=1)
 
@@ -230,22 +230,29 @@ class Matching:
                 for acts_same_day in activities_by_days.values():
                     for a, b in combinations(acts_same_day, 2):
                         self.model += self.vars[p, a] + self.vars[p, b] <= 1
+            else:
+                # In any cases, a player cannot play two activities at the
+                # same time.
+                for acts_same_day in activities_by_days.values():
+                    for a, b in combinations(acts_same_day, 2):
+                        if a.overlaps(b.start, b.end):
+                            self.model += self.vars[p, a] + self.vars[p, b] <= 1
 
             if TWO_CONSECUTIVE_DAYS in p.constraints:
-                for day in activities_by_days:
+                for day in days_played:
                     for a, b in product(activities_by_days[day],
                                         activities_by_days[day + one_day]):
                         self.model += self.vars[p, a] + self.vars[p, b] <= 1
 
             if THREE_CONSECUTIVE_DAYS in p.constraints:
-                for day in activities_by_days:
+                for day in days_played:
                     for acts in product(activities_by_days[day],
                                         activities_by_days[day + one_day],
                                         activities_by_days[day + 2 * one_day]):
                         self.model += xsum(self.vars[p, a] for a in acts) <= 2
 
             if MORE_CONSECUTIVE_DAYS in p.constraints:
-                for day in activities_by_days:
+                for day in days_played:
                     for acts in product(activities_by_days[day],
                                         activities_by_days[day + one_day],
                                         activities_by_days[day + 2 * one_day],
@@ -253,10 +260,10 @@ class Matching:
                         self.model += xsum(self.vars[p, a] for a in acts) <= 3
 
             if NIGHT_THEN_MORNING in p.constraints:
-                for day in activities_by_days:
+                for day in days_played:
                     for a, b in product(activities_by_days[day],
                                         activities_by_days[day + one_day]):
-                        if b.end - a.start <= timedelta(hours=12):
+                        if b.start - a.end <= timedelta(hours=12):
                             self.model += self.vars[p, a] + self.vars[p, b] <= 1
             
         # Blacklist constraints:
@@ -267,7 +274,7 @@ class Matching:
                         self.model += self.vars[p, a] + self.vars[q, a] <= 1
 
         # Finally, the function to optimize:
-        obj = maximize(xsum(p.activity_coef(a) * v
+        obj = maximize(xsum(p.activity_coef(a, self.decay) * v
                             for (p, a), v in self.vars.items()))
         self.model.objective = obj
 
@@ -297,16 +304,16 @@ class Matching:
         """Force the assignement of a player to an activity. This method must
         be called *before* the methode `solve`, otherwise it is useless. May
         fail if several activities correspond to the name."""
+        player = self.find_player_by_name(player_name)
         act = self.find_activity_by_name(activity_name)
         if len(act) != 1:
-            print(f"Multiple activities have the name {activity_name}. Could not make the difference.")
-            print("Instead, use `force_assign_activity_by_id(player, id)` with the unique activity ID")
-            print(f"Activities that matched : ")
-            for a in act:
-                print(a)
-            return
+            print(f"Multiple activities have the name {activity_name}. "
+                  f"We will make sure that the player {player_name} is "
+                   "affected to one of those. If you want to assign "
+                  f"{player_name} to a particular activity, you should use the "
+                   "method `force_assign_activity_by_id`.")
 
-        self.force_assign_activity_by_id(player_name, act[0].id)
+        self.model += xsum([self.vars[player, a] for a in act]) >= 1
 
     def force_assign_activity_by_id(
             self, 
@@ -314,11 +321,35 @@ class Matching:
             activity_id: int
         ) -> None:
         """force the assignement of a player to an activity. This method must
-        be called *before* the methode `solve`, otherwise its effect on the
+        be called *before* the method `solve`, otherwise its effect on the
         assignation is not visible."""
         player = self.find_player_by_name(player_name)
         activity = self.find_activity(activity_id)
         self.vars[player, activity].lb = 1
+
+    def set_min_players_activity_by_name(
+            self,
+            activity_name: str,
+            min_number: Option[Int]=None
+        ) -> None:
+        """Set the minimal number of players for an activity to a given
+        number. If no number is provided, set the minimal number of players to
+        the capacity of the activity. This method must be called *before* the
+        method `solve`, otherwise its effect on the assignation is not visible.
+        """
+        act = self.find_activity_by_name(activity_name)
+        if len(act) != 1:
+            print(f"Multiple activities have the name {activity_name}. Could not make the difference.")
+            print("Instead, use `force_assign_activity_by_id(player, id)` with the unique activity ID")
+            print(f"Activities that matched : ")
+            for a in act:
+                print(a)
+            raise ValueError
+
+        if min_number is None:
+            min_number = act[0].capacity
+        act[0].nb_players.lb = min_number
+        print(f"Minimal number of players set to {min_number}")
 
     # todo: rewrite
     def print_activities_status(self) -> None:

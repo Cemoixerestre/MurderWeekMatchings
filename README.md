@@ -20,24 +20,34 @@ Pour faire tourner le programme, il faut utiliser deux fichiers, au format CSV 
 - un fichier de joueureuses, indiquant pour chaque joueureuses les informations nécessaires (nom, classement des vœux, disponibilités, contraintes).
 Des exemples de fichiers sont trouvables dans le dossiers `data/`.
 
+## Bibliothèques nécessaires ##
+
+Ce programme nécessite l'utilisation des bibliothèques *pandas* et *Python-MIP*. Vous pouvez les installer à l'aides de la commande :
+```
+pip install pandas mip
+```
+
 ## Description de l'algorithme
 
-L'algorithme consiste en une succession des *passes*. Une passe consiste, à partir d'une liste de joueureuses, à donner une activité au plus de gens dans cette liste. L'attribution des rôles se fait en deux temps :
-1. Dans un premier temps, on exécute des passes, jusqu'à ce que tout le monde ait atteint le nombre *souhaité* d'activité ou ne puisse plus jouer d'autres activités.
-2. Ensuite, pour les personnes ayant atteint le nombre souhaité d'activité mais pas le nombre *maximal*, on exécute des passes, jusqu'à ce que tout le monde ait atteint le nombre maximal d'activité ou ne puisse plus jouer d'autres activités.
+Le cœur de l'algorithme est un algorithme de d'optimisation linéaire. Le fait qu'un·e joueureuse $j$ joue une activité $a$ est représenté par une variable linéaire $v_{j, a} \in \{0, 1\}$, le nombre de jeux d'un·e joueureuse $j$ est représenté par une variable $n_j$ et le nombre de joueureuses participant à une activité $a$ est représenté par une variable $n_a$. L'ensemble des contraintes (limites de joueureuses par activité, limites de jeux par joueureuses, contraintes temporelles, blacklists) sont traduites en contraintes linéaires entre les $v_{j, a}$, $n_j$ et $n_a$. La fonction que nous essayons de maximiser est :
+$$\sum_{j, a} d^{r(j, a)} x_{j, a}$$
+Avec $d \in [0, 1]$ un paramètre et $r(j, a)$ le rang de l'activité $a$ dans le classement de læ joueureuse $j$.
 
-### Méthode d'affectation pour les passes
+Afin de tenir compte du nombre idéal d'activités donnés par certain·es joueureuses, qui peut-être inférieur au nombre, la recherche d'une solution se fait en deux temps :
+1. Dans un premier temps, les nombres d'activités $n_j$ sont bornés par les nombres idéaux d'activité par joueureuses $i_j$. On fait tourner l'algorithme une première fois pour trouver une solution.
+2. On « fige dans le marbre » la solution trouvée. Si une variable $v_{j, a}$ est égale à 1, ce qui signifie que læ joueureuse $j$ joue l'activité $a$, on remonte la borne inférieure de la variable $v_{j, a}$ à 1 afin que la deuxième passe d'optimisation affecte toujours l'activité $a$ à $j$.
+3. On relâche les contraintes sur le nombre d'activité par joueureuses, en réhaussant la borne supérieures des $n_j$ par les nombre maximaux d'activités $m_j$.
+4. On effectue une deuxième passe d'optimisation pour affecter les dernières places restantes aux joueureuses qui ont leur nombre idéal d'activités mais qui peuvent en jouer plus.
 
-Il est possible de paramétrer l'algorithme en changeant la méthode d'affectation des passes. Actuellement, la méthode utilisée est un algorithme hôpital-résident. Chaque joueureuse (jouant le rôle d'un résident) classe les activités selont ses vœux. Pour chaque activité, le classement des joueureuses est le suivant : les joueureuses ayant jusque-là le moins d'activité sont avantagée, puis les joueureuses ayant classé l'activité en question le plus haut. Pour le reste, l'ordre est randomisé.
+Il est possible d'ajouter des contraintes supplémentaires, afin par exemple :
+- De s'assure qu'un·e joueureuse joue un jeu donné.
+- D'assurer un remplissage minimal à une activité donnée.
 
-Pour ce qui est des blacklists, si deux personnes ne peuvent pas jouer ensemble mais sont affectées à la même activité, l'une d'entre elles obtient l'activité. L'autre n'obtient pas d'activité cette passe-là.
+Attention cependant, donner trop de contraintes du genre peut rendre le problème insolvable, ou empêcher des joueureuses de jouer des activités qu'iels désirent. Si toutes les activités ne sont pas remplies, il peut être préférable de changer le planning plutôt que de forcer des affectations.
 
-### Gestion des conflits
-Les conflits sont des contraintes empêchant à un·e joueureuse de jouer une activité. Voici les différents types de conflits pris en compte :
-1. Il n'est pas possible de jouer une activité en même temps que l'on joue.
-2. Il n'est pas possible de jouer de jouer deux activités en même temps.
-3. Contraintes temporelles demandées par les joueureuses (pas deux jeux le même jour, deux jours de suite, etc.)
-4. Blacklist : une personne ne veut pas jouer dans la même session qu'une autre.
-5. Activité pleine.
-
-Pour le conflit n°1, pour chaque organisateurice, les activités rentrant en conflit avec une organisation sont retirées. Pour le retrait des activité se fait à la fois durant les passes (comme décrit précédemment) entre entre les passes. Pour tous autres conflits, le retrait se fait à la fin de chaque passe.
+Le paramètre $d$ change la nature de la solution. De manière empirique, à l'aide des données d'inscription de la murder week 2022, j'ai pu observer que :
+- Si $d \leq 0.2$, beaucoup de jeux ne sont pas remplis.
+- Si $d \in [0.3, 0.5]$, tous les jeux sont remplis et tout le monde obtient son activité demandée en premier.
+- Si $d \in [0.6, 0.7]$, tous les jeux sont remplis et toutes les personnes sauf une obtiennent leur activité favorite. Plus personne obtiennent le nombre de jeu idéal que pour $d \in [0.3, 0.5]$.
+- Si $d \geq 0.8$, un certain nombre de personnes n'obtiennent pas leur activité demandée en premier.
+La meilleur solution trouvée a été pour $d = 0.6$ ou $0.7$, en forçant l'affectation à son jeu préféré pour la personne en question.

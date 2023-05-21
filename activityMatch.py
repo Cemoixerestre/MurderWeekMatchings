@@ -298,14 +298,18 @@ class Matching:
         return pl[0]
 
     def force_assign_activity(
-            self, player_name: str,
+            self,
+            player_name: str,
             activity_name: str
         ) -> None:        
         """Force the assignement of a player to an activity. This method must
         be called *before* the methode `solve`, otherwise it is useless. May
         fail if several activities correspond to the name."""
         player = self.find_player_by_name(player_name)
-        act = self.find_activity_by_name(activity_name)
+        act = [a for a in player.wishes if a.name == activity_name]
+        if act == []:
+            raise ValueError(f"No activity named {activity_name} that "
+                             f"{player_name} can play.")
         if len(act) != 1:
             print(f"Multiple activities have the name {activity_name}. "
                   f"We will make sure that the player {player_name} is "
@@ -313,7 +317,7 @@ class Matching:
                   f"{player_name} to a particular activity, you should use the "
                    "method `force_assign_activity_by_id`.")
 
-        self.model += xsum([self.vars[player, a] for a in act]) >= 1
+        self.model += xsum(self.vars[player, a] for a in act) >= 1
 
     def force_assign_activity_by_id(
             self, 

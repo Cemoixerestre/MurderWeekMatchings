@@ -5,9 +5,9 @@ Un programme pour effectuer l'attribution des murders à la murder week.
 ## Comment utiliser ce programme ?
 
 Pour effectuer l'attribution des murders, voici la méthode à utiliser :
-1. À partir du formulaire d'inscription, extraire un fichier de joueureuses.
-2. Effectuer un plannnig, extraire un fichier d'activité.
-3. Lancer le programme à l'aide de ses deux fichiers pour générer des premières attribution.
+1. À partir du formulaire d'inscription, extraire un fichier d'inscription.
+2. Effectuer un premier planning et le décrire en un fichier d'activité.
+3. Lancer le programme à l'aide de ces deux fichiers pour générer des premières attribution.
 4. En analysant la première attribution, effectuer des ajustements au planning, afin de permettre le remplissage des activités incomplètes et que le plus de personnes puissent jouer un nombre satisfaisant d'activités. Il est possible par exemple de déplacer des sessions ou de retirer des activités qui ne pourront pas être remplies.
 5. Générer une nouvelle attribution, puis répéter les étapes d'ajustements jusqu'à obtenir une attribution satisfaisante.
 
@@ -17,8 +17,9 @@ Le programme principal est sous la forme d'un notebook jupyter, dans le fichier 
 
 Pour faire tourner le programme, il faut utiliser deux fichiers, au format CSV :
 - un fichier d'activité, indiquant pour chaque activités les informations nécessaires (nom, capacité, horaires, organisateurices).
-- un fichier de joueureuses, indiquant pour chaque joueureuses les informations nécessaires (nom, classement des vœux, disponibilités, contraintes).
-Des exemples de fichiers sont trouvables dans le dossiers `data/`.
+- un fichier d'inscription, indiquant pour chaque joueureuses les informations nécessaires (nom, classement des vœux, disponibilités, contraintes).
+
+Pour comprendre le format, vous pouvez vous aider des fichiers en exemple `data/format_standard_activites.csv` et `data/format_standard_inscriptions.csv`.
 
 ## Bibliothèques nécessaires ##
 
@@ -33,11 +34,7 @@ Le cœur de l'algorithme est un algorithme de d'optimisation linéaire. Le fait 
 $$\sum_{j, a} d^{r(j, a)} v_{j, a}$$
 Avec $d \in [0, 1]$ un paramètre et $r(j, a)$ le rang de l'activité $a$ dans le classement de læ joueureuse $j$.
 
-Afin de tenir compte du nombre idéal d'activités donnés par certain·es joueureuses, qui peut-être inférieur au nombre, la recherche d'une solution se fait en deux temps :
-1. Dans un premier temps, les nombres d'activités $n_j$ sont bornés par les nombres idéaux d'activité par joueureuses $i_j$. On fait tourner l'algorithme une première fois pour trouver une solution.
-2. On « fige dans le marbre » la solution trouvée. Si une variable $v_{j, a}$ est égale à 1, ce qui signifie que læ joueureuse $j$ joue l'activité $a$, on remonte la borne inférieure de la variable $v_{j, a}$ à 1 afin que la deuxième passe d'optimisation affecte toujours l'activité $a$ à $j$.
-3. On relâche les contraintes sur le nombre d'activité par joueureuses, en réhaussant la borne supérieures des $n_j$ par les nombre maximaux d'activités $m_j$.
-4. On effectue une deuxième passe d'optimisation pour affecter les dernières places restantes aux joueureuses qui ont leur nombre idéal d'activités mais qui peuvent en jouer plus.
+Afin de tenir compte du nombre idéal d'activités donnés par certain·es joueureuses, qui peut-être inférieur au nombre, la recherche d'une solution se fait en deux temps. Dans la première passe d'assignation, on affecte un maximum d'activités aux joueureuses dans la limite des nombres *idéaux* d'activité. La deuxième passe affecte des activités aux joueureuses qui ont atteint leur nombre idéal d'activité, mais dans la limite de leur nombre *maximal* d'activité.
 
 Il est possible d'ajouter des contraintes supplémentaires, afin par exemple :
 - De s'assure qu'un·e joueureuse joue un jeu donné.

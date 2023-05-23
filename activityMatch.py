@@ -214,8 +214,9 @@ class Matching:
             for w in p.wishes:
                 wishes_by_name[w.name].append(w)
             for wishes_same_name in wishes_by_name.values():
-                for w0, w1 in combinations(wishes_same_name, 2):
-                    self.model += self.vars[p, w0] + self.vars[p, w1] <= 1
+                if len(wishes_same_name) >= 2:
+                    c = xsum(self.vars[p, a] for a in wishes_same_name) <= 1
+                    self.model += c
 
         # Time constaints:
         for p in self.players:
@@ -228,8 +229,8 @@ class Matching:
 
             if TWO_SAME_DAY in p.constraints:
                 for acts_same_day in activities_by_days.values():
-                    for a, b in combinations(acts_same_day, 2):
-                        self.model += self.vars[p, a] + self.vars[p, b] <= 1
+                    c = xsum(self.vars[p, a] for a in acts_same_day) <= 1
+                    self.model += c
             else:
                 # In any cases, a player cannot play two activities at the
                 # same time.

@@ -34,7 +34,7 @@ Le cœur de l'algorithme est un algorithme de d'optimisation linéaire. Le fait 
 $$\sum_{j, a} d^{r(j, a)} v_{j, a}$$
 Avec $d \in [0, 1]$ un paramètre et $r(j, a)$ le rang de l'activité $a$ dans le classement de læ joueureuse $j$.
 
-Afin de tenir compte du nombre idéal d'activités donnés par certain·es joueureuses, qui peut-être inférieur au nombre, la recherche d'une solution se fait en deux temps. Dans la première passe d'assignation, on affecte un maximum d'activités aux joueureuses dans la limite des nombres *idéaux* d'activité. La deuxième passe affecte des activités aux joueureuses qui ont atteint leur nombre idéal d'activité, mais dans la limite de leur nombre *maximal* d'activité.
+Afin de tenir compte du nombre idéal d'activités donnés par certain·es joueureuses, qui peut-être inférieur au nombre maximal, la recherche d'une solution se fait en deux temps. Dans la première passe d'assignation, on affecte un maximum d'activités aux joueureuses dans la limite des nombres *idéaux* d'activité. La deuxième passe affecte des activités aux joueureuses qui ont atteint leur nombre idéal d'activité, mais dans la limite de leur nombre *maximal* d'activité.
 
 Il est possible d'ajouter des contraintes supplémentaires, afin par exemple :
 - De s'assure qu'un·e joueureuse joue un jeu donné.

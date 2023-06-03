@@ -47,4 +47,5 @@ Le paramètre $d$ change la nature de la solution. De manière empirique, à l'a
 - Si $d \in [0.3, 0.5]$, tous les jeux sont remplis et tout le monde obtient son activité demandée en premier.
 - Si $d \in [0.6, 0.7]$, tous les jeux sont remplis et toutes les personnes sauf une obtiennent leur activité favorite. Plus personne obtiennent le nombre de jeu idéal que pour $d \in [0.3, 0.5]$.
 - Si $d \geq 0.8$, un certain nombre de personnes n'obtiennent pas leur activité demandée en premier.
-La meilleur solution trouvée a été pour $d = 0.6$ ou $0.7$, en forçant l'affectation à son jeu préféré pour la personne en question.
+
+La meilleure solution a été trouvée pour $d = 0.6$ ou $0.7$, en forçant l'affectation à son jeu préféré pour la personne en question.

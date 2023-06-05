@@ -3,7 +3,7 @@ import pandas
 from typing import List, Optional, Dict, Tuple
 
 from activityMatch import Activity, Player, CONSTRAINT_NAMES
-from timeSlots import generate_timeslots_from_column_names, WEEK_DAYS
+from timeslots import generate_timeslots_from_column_names, WEEK_DAYS
 
 def load_activities_and_players(act_path: Path, players_path: Path, verbose=True) -> Tuple[List[Activity], List[Player]]:
     """Loading the activities and the players.
@@ -19,8 +19,6 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
     wish <n> : Activity in rank <n> in their wishlist. These columns MUST be in the right order
     max_games : max number of activities to participate"""
 
-    # TODO: Manage players disponibility during the week to remove wishes for activities when the player is not there
-    
     activities_df = pandas.read_csv(act_path, delimiter=',', quotechar='"', parse_dates=['start', 'end'])
     activities: List[Activity] = []
     orgas: List[str] = []

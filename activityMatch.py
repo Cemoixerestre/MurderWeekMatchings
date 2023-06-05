@@ -6,7 +6,7 @@ from collections import defaultdict
 from itertools import combinations, product
 from mip import Model, Var, OptimizationStatus, maximize, xsum, BINARY, INTEGER
 
-from timeSlots import TimeSlot, generate_all_timeslots
+from timeslots import TimeSlot
 
 class Activity:
     ACTIVE_ACTIVITIES = 0
@@ -24,10 +24,7 @@ class Activity:
 
         self.name: str = name
         self.capacity: int = capacity
-        self.start: datetime = start
-        self.end: datetime = end
-        assert self.start < self.end, \
-               f"Activity {self.name} ends before it starts."
+        self.timeslot = TimeSlot(None, start, end)
         # An ILP variable representing the number of players playing the
         # activity. It is bounded by the capacity.
         self.nb_players: Option[Var] = None
@@ -39,15 +36,9 @@ class Activity:
         self.nb_players = model.add_var(var_type=INTEGER, ub=self.capacity)
 
     def __repr__(self):
-        return f"{self.id} | {self.name} | {len(self.players)} / {self.capacity} players | {self.start} - {self.end}"
-
-    def overlaps(self, start: datetime, end: datetime) -> bool:
-        if (self.start <= start) and (start < self.end):
-            return True
-        elif (start <= self.start) and (self.start < end):
-            return True
-        else:
-            return False
+        return f"{self.id} | {self.name} | " \
+               f"{len(self.players)} / {self.capacity} players | " \
+               f"{self.timeslot}"
 
     def is_full(self) -> bool:
         return len(self.players) >= self.capacity
@@ -60,6 +51,17 @@ class Activity:
 
     def remaining_slots(self) -> int:
         return self.capacity - len(self.players)
+
+    def overlaps(self, slot: TimeSlot) -> bool:
+        return self.timeslot.overlaps(slot)
+
+    def date(self) -> datetime:
+        return self.timeslot.start.date()
+
+    def night_then_morning(self, other: Activity) -> bool:
+        if other.date() - self.date() != timedelta(days=1):
+            return False
+        return other.timeslot.start - self.timeslot.end <= timedelta(hours=12)
 
 
 # Constraint management
@@ -127,7 +129,7 @@ class Player:
         """
         if not self.orga_player_same_day:
             activity_when_orga = [a for a in self.wishes for o in self.organizing
-                                  if a.start.date() == o.start.date()]
+                                  if a.date() == o.date()]
             if verbose and activity_when_orga:
                 print("Found wishes and activities the same day :")
                 for a in set(activity_when_orga):
@@ -137,7 +139,7 @@ class Player:
                 self.wishes.remove(a)
 
         organizing = [a for a in self.wishes for o in self.organizing
-                       if a.overlaps(o.start, o.end)]
+                       if a.overlaps(o.timeslot)]
         if verbose and organizing:
             print("Found wishes when organizing :")
             for a in set(organizing):
@@ -147,7 +149,7 @@ class Player:
             self.wishes.remove(a)
 
         conflicting = [a for a in self.wishes for slot in self.non_availability
-                       if a.overlaps(slot.start, slot.end)]
+                       if a.overlaps(slot)]
         if verbose and conflicting:
             print("Found wishes where not available :")
             for a in set(conflicting):
@@ -222,7 +224,7 @@ class Matching:
         for p in self.players:
             activities_by_days = defaultdict(list)
             for act in p.wishes:
-                activities_by_days[act.start.date()].append(act)
+                activities_by_days[act.date()].append(act)
             days_played = list(activities_by_days.keys())
 
             one_day = timedelta(days=1)
@@ -236,7 +238,7 @@ class Matching:
                 # same time.
                 for acts_same_day in activities_by_days.values():
                     for a, b in combinations(acts_same_day, 2):
-                        if a.overlaps(b.start, b.end):
+                        if a.overlaps(b.timeslot):
                             self.model += self.vars[p, a] + self.vars[p, b] <= 1
 
             if TWO_CONSECUTIVE_DAYS in p.constraints:
@@ -264,7 +266,7 @@ class Matching:
                 for day in days_played:
                     for a, b in product(activities_by_days[day],
                                         activities_by_days[day + one_day]):
-                        if b.start - a.end <= timedelta(hours=12):
+                        if a.night_then_morning(b):
                             self.model += self.vars[p, a] + self.vars[p, b] <= 1
             
         # Blacklist constraints:
@@ -390,13 +392,13 @@ class Matching:
             print(f"* {p.name} | Got {len(p.activities)} activities. "
                   f"Ideal {p.ideal_activities}. Max {p.max_activities}.")
             print("  + Activities")
-            p.activities.sort(key=lambda a: a.start)
+            p.activities.sort(key=lambda a: a.timeslot.start)
             for a in p.activities:
-                print(f"    - {a.name} | Start: {a.start}")
+                print(f"    - {a.name} | {a.timeslot}")
             if p.organizing:
                 print("  + Also organizing the following activities:")
                 for a in p.organizing:
-                    print(f"    - {a.name} | Start: {a.start}")
+                    print(f"    - {a.name} | {a.timeslot}")
 
             # Collecting statistics
             if len(p.activities) < p.ideal_activities:

@@ -177,7 +177,7 @@ class Player:
         self.blacklist.append(player)
 
 
-class Matching:
+class Matcher:
     """TODO"""
     def __init__(self, players: List[Player], activities: List[Activity],
                  decay=0.5):

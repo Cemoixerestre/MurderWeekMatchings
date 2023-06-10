@@ -30,15 +30,14 @@ class Activity:
         self.nb_players: Option[Var] = None
 
         self.orgas: List[Player] = []
-        self.players: List[Player] = []
 
     def create_nb_players_variable(self, model: Model) -> None:
         self.nb_players = model.add_var(var_type=INTEGER, ub=self.capacity)
 
     def __repr__(self):
         return f"{self.id} | {self.name} | " \
-               f"{len(self.players)} / {self.capacity} players | " \
                f"{self.timeslot}"
+               #f"{len(self.players)} / {self.capacity} players | " 
 
     def is_full(self) -> bool:
         return len(self.players) >= self.capacity
@@ -48,9 +47,6 @@ class Activity:
 
     def add_orga(self, orga: Player) -> None:
         self.orgas.append(orga)
-
-    def remaining_slots(self) -> int:
-        return self.capacity - len(self.players)
 
     def overlaps(self, slot: TimeSlot) -> bool:
         return self.timeslot.overlaps(slot)
@@ -110,7 +106,6 @@ class Player:
         self.nb_activites: Option[Var] = None
 
         self.blacklist: List[Player] = []
-        self.activities: List[Activity] = []
         self.organizing: List[Activity] = []
 
     def add_orga(self, activity: Activity) -> None:
@@ -358,81 +353,14 @@ class Matcher:
         act[0].nb_players.lb = min_number
         print(f"Minimal number of players set to {min_number}")
 
-    # todo: rewrite
-    def print_activities_status(self) -> None:
-        print("Activities with a full cast:")
-        for a in self.activities:
-            if a.remaining_slots() > 0:
-                # The activity is not full
-                continue
-            print(f"* {a}")
-            for p in a.players:
-                print(f"  - {p.name}")
-            print("")
-
-        print("Activities WITHOUT a full cast:")
-        for a in self.activities:
-            if a.remaining_slots() == 0:
-                # The activity is not full
-                continue
-            print(f"* {a}")
-            for p in a.players:
-                print(f"  - {p.name}")
-            print(f" Missing {a.remaining_slots()} more")
-            print("")
-
-    def print_players_status(self) -> None:
-        print("Activities given to each player:")
-        less = 0 # number of players with less activities than ideal
-        ideal = 0 # number of players with the ideal number of activities
-        more = 0 # number of players with more activities than ideal
-        no_best_choice = [] # players who did not obtain their best choice
-        top_3_choice = 0 # number of top 3 choices cumulated
-        for p in self.players:
-            print(f"* {p.name} | Got {len(p.activities)} activities. "
-                  f"Ideal {p.ideal_activities}. Max {p.max_activities}.")
-            print("  + Activities")
-            p.activities.sort(key=lambda a: a.timeslot.start)
-            for a in p.activities:
-                print(f"    - {a.name} | {a.timeslot}")
-            if p.organizing:
-                print("  + Also organizing the following activities:")
-                for a in p.organizing:
-                    print(f"    - {a.name} | {a.timeslot}")
-
-            # Collecting statistics
-            if len(p.activities) < p.ideal_activities:
-                less += 1
-            elif len(p.activities) == p.ideal_activities:
-                ideal += 1
-            else:
-                more += 1
-            activity_names = [a.name for a in p.activities]
-            if p.ranked_activity_names[0] not in activity_names:
-                no_best_choice.append(p)
-            for name in p.ranked_activity_names[:3]:
-                if name in activity_names:
-                    top_3_choice += 1
-
-        nb_players = len(self.players)
-        print( "Players with less activities than ideal:\t"
-              f"{less} (= {100 * less / nb_players:.1f}%)")
-        print( "Players with ideal number of activities:\t"
-              f"{ideal} (= {100 * ideal / nb_players:.1f}%)")
-        print( "Players with more activities than ideal:\t"
-              f"{more} (= {100 * more / nb_players:.1f}%)")
-        print()
-        print( "Players who did not obtain their best choice: "
-              f"{' '.join(map(repr, no_best_choice))}")
-        print(f"Nb of top 3 choices: {top_3_choice}")
-
-    def solve(self, verbose=False) -> None:
+    def solve(self, verbose=False) -> MatchResult:
         # Finding a solution where every player plays at most the *ideal* number
         # of games.
         status = self.model.optimize()
         if status != OptimizationStatus.OPTIMAL:
             print(status)
-            raise RuntimeError
+            raise RuntimeError("Error while solving the problem. Maybe the "
+                               "constraints where unsatisfiable?")
 
         # We want to improve the obtained solution so that each player can play
         # up to the maximal number of games.
@@ -447,21 +375,91 @@ class Matcher:
             p.nb_activities.ub = p.max_activities
 
         self.model.optimize()
+        res = MatchResult(self.players, self.activities)
         for (p, a), v in self.vars.items():
-            if v.x == 1:
-                p.activities.append(a)
-                a.players.append(p)
+            if v.x >= 0.9:
+                res.add(p, a)
+        return res
 
-    # TODO: unused. Keep it?
-    def return_player_status(self) -> (Int, Int, Int):
+class MatchResult:
+    def __init__(self, players: List[Player], activities: List[Activity]):
+        # List of players for each activity
+        self.players: Dict[Activity, List[Player]] = \
+            {a:[] for a in activities}
+        # List of activities for each player
+        self.activities: Dict[Player, List[Activity]] = \
+            {a:[] for a in players}
+        self.nb_players = len(players)
+        self.nb_activities = len(activities)
+
+    def add(self, player: Player, activity: Activity) -> None:
+        self.activities[player].append(activity)
+        self.players[activity].append(player)
+
+    def print_activities_status(self) -> None:
+        print("Activities with a full cast:")
+        for a, ps in self.players.items():
+            remaining_slots = a.capacity - len(ps)
+            if remaining_slots > 0:
+                # The activity is not full
+                continue
+            print(f"* {a}")
+            for p in ps:
+                print(f"  - {p.name}")
+            print("")
+
+        print("Activities WITHOUT a full cast:")
+        for a, ps in self.players.items():
+            remaining_slots = a.capacity - len(ps)
+            if remaining_slots == 0:
+                # The activity is not full
+                continue
+            print(f"* {a}")
+            for p in ps:
+                print(f"  - {p.name}")
+            print(f" Missing {remaining_slots} more")
+            print("")
+
+    def print_players_status(self) -> None:
+        print("Activities given to each player:")
         less = 0 # number of players with less activities than ideal
         ideal = 0 # number of players with the ideal number of activities
         more = 0 # number of players with more activities than ideal
-        for p in self.all_players():
-            if len(p.activities) < p.ideal_activities:
+        no_best_choice = [] # players who did not obtain their best choice
+        top_3_choice = 0 # number of top 3 choices cumulated
+        for (p, act) in self.activities.items():
+            print(f"* {p.name} | Got {len(act)} activities. "
+                  f"Ideal {p.ideal_activities}. Max {p.max_activities}.")
+            print("  + Activities")
+            act.sort(key=lambda a: a.timeslot.start)
+            for a in act:
+                print(f"    - {a.name} | {a.timeslot}")
+            if p.organizing:
+                print("  + Also organizing the following activities:")
+                for a in p.organizing:
+                    print(f"    - {a.name} | {a.timeslot}")
+
+            # Collecting statistics
+            if len(act) < p.ideal_activities:
                 less += 1
-            elif len(p.activities) == p.ideal_activities:
+            elif len(act) == p.ideal_activities:
                 ideal += 1
             else:
                 more += 1
-        return (less, ideal, more)
+            activity_names = [a.name for a in act]
+            if p.ranked_activity_names[0] not in activity_names:
+                no_best_choice.append(p)
+            for name in p.ranked_activity_names[:3]:
+                if name in activity_names:
+                    top_3_choice += 1
+
+        print( "Players with less activities than ideal:\t"
+              f"{less} (= {100 * less / self.nb_players:.1f}%)")
+        print( "Players with ideal number of activities:\t"
+              f"{ideal} (= {100 * ideal / self.nb_players:.1f}%)")
+        print( "Players with more activities than ideal:\t"
+              f"{more} (= {100 * more / self.nb_players:.1f}%)")
+        print()
+        print( "Players who did not obtain their best choice: "
+              f"{' '.join(map(repr, no_best_choice))}")
+        print(f"Nb of top 3 choices: {top_3_choice}")

@@ -4,6 +4,7 @@ from typing import List, Dict, Optional, Tuple, Iterator, Set
 from datetime import datetime, timedelta
 from collections import defaultdict
 from itertools import combinations, product
+import csv
 from mip import Model, Var, OptimizationStatus, maximize, xsum, BINARY, INTEGER
 
 from timeslots import TimeSlot
@@ -391,16 +392,20 @@ class MatchResult:
             {a:[] for a in players}
         self.nb_players = len(players)
         self.nb_activities = len(activities)
+        # Number of remaining slots for each activities
+        self.remaining_slots: Dict[Activity, int] = \
+            {a:a.capacity for a, ps in self.players.items()}
 
     def add(self, player: Player, activity: Activity) -> None:
         self.activities[player].append(activity)
         self.players[activity].append(player)
+        self.remaining_slots[activity] -= 1
+        assert self.remaining_slots[activity] >= 0
 
     def print_activities_status(self) -> None:
         print("Activities with a full cast:")
         for a, ps in self.players.items():
-            remaining_slots = a.capacity - len(ps)
-            if remaining_slots > 0:
+            if self.remaining_slots[a] > 0:
                 # The activity is not full
                 continue
             print(f"* {a}")
@@ -410,14 +415,13 @@ class MatchResult:
 
         print("Activities WITHOUT a full cast:")
         for a, ps in self.players.items():
-            remaining_slots = a.capacity - len(ps)
-            if remaining_slots == 0:
+            if self.remaining_slots[a] == 0:
                 # The activity is not full
                 continue
             print(f"* {a}")
             for p in ps:
                 print(f"  - {p.name}")
-            print(f" Missing {remaining_slots} more")
+            print(f" Missing {self.remaining_slots[a]} more")
             print("")
 
     def print_players_status(self) -> None:
@@ -463,3 +467,37 @@ class MatchResult:
         print( "Players who did not obtain their best choice: "
               f"{' '.join(map(repr, no_best_choice))}")
         print(f"Nb of top 3 choices: {top_3_choice}")
+
+    def export_activities_to_csv(self, filename: str) -> None:
+        activities = sorted(self.players.keys(), key=lambda a: a.timeslot.start)
+        max_orgas = max(len(a.orgas) for a in activities)
+        max_players = max(len(ps) + 1 for ps in self.players.values())
+        with open(filename, "w") as f:
+            writer = csv.writer(f)
+            writer.writerow(["Jeu"] + [a.name for a in activities])
+            writer.writerow(["Jour"] + [a.timeslot.disp_day() for a in activities])
+            writer.writerow(["Horaire"] + [a.timeslot.disp_hour() for a in activities])
+            writer.writerow([])
+
+            row_name = "Organisateurices"
+            for i in range(max_orgas):
+                orgas = [a.orgas[i].name if i < len(a.orgas) else ""
+                         for a in activities]
+                writer.writerow([row_name] + orgas)
+                row_name = ""
+            writer.writerow([])
+
+            row_name = "Joueureuses"
+            for i in range(max_players):
+                players = []
+                for a in activities:
+                    remaining = self.remaining_slots[a]
+                    if i < len(self.players[a]):
+                        players.append(self.players[a][i].name)
+                    elif i == len(self.players[a]) and remaining > 0:
+                        players.append(f"... {remaining} places restantes")
+                    else:
+                        players.append("")
+                writer.writerow([row_name] + players)
+                row_name = ""
+        print(f"Successfully write to the file {filename}")

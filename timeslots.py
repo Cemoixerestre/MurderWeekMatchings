@@ -17,7 +17,6 @@ MONTH = "08"
 
 class TimeSlot:
     def __init__(self, day_name: Option[str], start: datetime, end: datetime):
-        self.day_name: Option[str] = day_name # TODO: unused
         self.start = start
         self.end = end
         assert self.start.day == self.end.day, \
@@ -26,6 +25,10 @@ class TimeSlot:
         assert self.start < self.end, \
             "Error: time slot should starts before it ends. " \
             f"day. Erroneous dates: start = {start} and end = {end}."
+
+        self.day_name: str = WEEK_DAYS[start.weekday()]
+        if day_name is not None:
+            assert self.day_name == day_name
 
     def overlaps(self, other: TimeSlot) -> bool:
         if (self.start <= other.start) and (other.start < self.end):
@@ -39,6 +42,13 @@ class TimeSlot:
         start_hour = f"{self.start.hour:02}:{self.start.minute:02}"
         end_hour = f"{self.end.hour:02}:{self.end.minute:02}"
         return f"{self.start.day:02}/{MONTH} {start_hour}-{end_hour}"
+
+    def disp_day(self) -> str:
+        return f"{self.day_name} {self.start.day}"
+
+    def disp_hour(self) -> str:
+        return f"{self.start.hour:02}:{self.start.minute:02}-" \
+               f"{self.end.hour:02}:{self.end.minute:02}"
 
 def generate_timeslots_from_column_names(column_names: List[str]) -> Dict[str, TimeSlot]:
     res = dict()

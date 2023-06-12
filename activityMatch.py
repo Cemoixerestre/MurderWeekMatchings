@@ -501,3 +501,17 @@ class MatchResult:
                 writer.writerow([row_name] + players)
                 row_name = ""
         print(f"Successfully write to the file {filename}")
+
+    def compare(self, other: MatchResult):
+        """Affiche les différences entre deux castings"""
+        for a, ps in self.players.items():
+            diff_plus = set(ps) - set(other.players[a])
+            diff_minus = set(other.players[a]) - set(ps)
+            if len(diff_plus) == 0 and len(diff_minus) == 0:
+                continue
+            print(a)
+            for p in diff_plus:
+                print(f"+ {p}")
+            for p in diff_minus:
+                print(f"- {p}")
+            print()

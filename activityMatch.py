@@ -92,6 +92,7 @@ class Player:
 
         self.name = name
         self.wishes = wishes
+        self.initial_activity_names: List[str] = []
         self.ranked_activity_names: List[str] = []
         self.non_availability: List[TimeSlot] = non_availabilities
         self.max_activities = max_activities
@@ -123,6 +124,11 @@ class Player:
         This procedure is called once after the initialization of players
         and activities.
         """
+        for w in self.wishes:
+            if self.initial_activity_names == [] or \
+               self.initial_activity_names[-1] != w.name:
+                self.initial_activity_names.append(w.name)
+
         if not self.orga_player_same_day:
             activity_when_orga = [a for a in self.wishes for o in self.organizing
                                   if a.date() == o.date()]
@@ -164,6 +170,14 @@ class Player:
 
     def activity_coef(self, activity: str, decay: float) -> float:
         return decay ** self.ranked_activity_names.index(activity.name)
+
+    def name_with_rank(self, name: str) -> str:
+        """Return the name of an activity along with its rank.
+        Contrary to the function "activity_coef", the rank is the rank of the
+        activity among the initial wishlist, not among the wishlist after
+        filtering out activities where the player is unavailable."""
+        rank = 1 + self.initial_activity_names.index(name)
+        return f"{name} (n°{rank})"
 
     def __repr__(self):
         return f"{self.id} | {self.name}"
@@ -389,7 +403,13 @@ class MatchResult:
             {a:[] for a in activities}
         # List of activities for each player
         self.activities: Dict[Player, List[Activity]] = \
-            {a:[] for a in players}
+            {p:[] for p in players}
+        self.refused: Dict[Player, List[str]] = \
+            {p: p.ranked_activity_names.copy() for p in players}
+        self.unavailable: Dict[Player, List[str]] = \
+            {p:list(set(p.initial_activity_names) - set(p.ranked_activity_names))
+             for p in players}
+        
         self.nb_players = len(players)
         self.nb_activities = len(activities)
         # Number of remaining slots for each activities
@@ -400,6 +420,7 @@ class MatchResult:
         self.activities[player].append(activity)
         self.players[activity].append(player)
         self.remaining_slots[activity] -= 1
+        self.refused[player].remove(activity.name)
         assert self.remaining_slots[activity] >= 0
 
     def print_activities_status(self) -> None:
@@ -500,7 +521,108 @@ class MatchResult:
                         players.append("")
                 writer.writerow([row_name] + players)
                 row_name = ""
-        print(f"Successfully write to the file {filename}")
+        print(f"Successfully wrote to the file {filename}")
+
+    def write_activities_to_csv(self,
+                                writer: csv.writer,
+                                players: List[Player],
+                                row_name: str,
+                                activities: Dict[Player, List[Activity]],
+                                disp_dates=True,
+                                disp_rank=True) -> None:
+        max_activities = max(len(act) for act in activities.values())
+        for i in range(max_activities):
+            row = [row_name]
+            row_name = ""
+            for p in players:
+                if i >= len(activities[p]):
+                    row.append("")
+                    if disp_dates:
+                        row.append("")
+                    continue
+
+                a = activities[p][i]
+                if disp_rank:
+                    row.append(p.name_with_rank(a.name))
+                else:
+                    row.append(a.name)
+                if disp_dates:
+                    row.append(repr(a.timeslot))
+
+            writer.writerow(row)
+
+    def write_names_to_csv(self,
+                           writer: csv.writer,
+                           players: List[Player],
+                           row_name: str,
+                           names: Dict[Player, List[str]],
+                           disp_dates=True,
+                           disp_rank=True) -> None:
+        max_names = max(len(ns) for ns in names.values())
+        for i in range(max_names):
+            row = [row_name]
+            row_name = ""
+            for p in players:
+                if i >= len(names[p]):
+                    row.append("")
+                    if disp_dates:
+                        row.append("")
+                    continue
+                name = names[p][i]
+                if disp_rank:
+                    row.append(p.name_with_rank(name))
+                else:
+                    row.append(name)
+                if disp_dates:
+                    row.append("")
+
+            writer.writerow(row)
+
+    def export_players_to_csv(self,
+                              filename: str,
+                              disp_orga=True,
+                              disp_refused=True,
+                              disp_unavailable=True,
+                              disp_dates=True,
+                              disp_rank=True) -> None:
+        players = sorted(self.activities.keys(), key=lambda p: p.name)
+        for act in self.activities.values():
+            act.sort(key=lambda a: a.timeslot.start)
+
+        with open(filename, "w") as f:
+            writer = csv.writer(f)
+            row = ["Joueureuses"]
+            for p in players:
+                row.append(p.name)
+                if disp_dates:
+                    row.append("")
+            writer.writerow(row)
+            
+            row = ["Nombre d'activités"]
+            for p in players:
+                row.append(f"{len(self.activities[p])}/{p.ideal_activities}, "
+                           f"max={p.max_activities}")
+                if disp_dates:
+                    row.append("")
+            writer.writerow(row)
+            writer.writerow([])
+            
+            self.write_activities_to_csv(writer, players, "Activités",
+                                         self.activities, disp_dates, disp_rank)
+            if disp_orga:
+                writer.writerow([])
+                organizing = {p:p.organizing for p in players}
+                self.write_activities_to_csv(writer, players, "Organise",
+                                             organizing, disp_dates, disp_rank=False)
+            if disp_refused:
+                writer.writerow([])
+                self.write_names_to_csv(writer, players, "N'a pas été pris·e à",
+                                        self.refused, disp_dates, disp_rank)
+            if disp_unavailable:
+                writer.writerow([])
+                self.write_names_to_csv(writer, players, "Indisponibilités",
+                                        self.unavailable, disp_dates, disp_rank)
+        print(f"Successfully wrote to the file {filename}")
 
     def compare(self, other: MatchResult):
         """Affiche les différences entre deux castings"""

@@ -11,8 +11,8 @@ SLOT_TIMES = {
 
 WEEK_DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
 
-EVENT_DAY_START = 22
-YEAR = "2022"
+EVENT_DAY_START = 19
+YEAR = "2023"
 MONTH = "08"
 
 class TimeSlot:

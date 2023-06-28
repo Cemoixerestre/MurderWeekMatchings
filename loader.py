@@ -1,6 +1,7 @@
 from pathlib import Path
 import pandas
 from typing import List, Optional, Dict, Tuple
+from datetime import datetime
 
 from activityMatch import Activity, Player, CONSTRAINT_NAMES
 from timeslots import generate_timeslots_from_column_names, WEEK_DAYS
@@ -19,13 +20,15 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
     wish <n> : Activity in rank <n> in their wishlist. These columns MUST be in the right order
     max_games : max number of activities to participate"""
 
-    activities_df = pandas.read_csv(act_path, delimiter=',', quotechar='"', parse_dates=['start', 'end'])
+    activities_df = pandas.read_csv(act_path, delimiter=',', quotechar='"')
     activities: List[Activity] = []
     orgas: List[str] = []
     for (_, act) in activities_df.iterrows():
         if pandas.isna(act['name']):
             continue
-        a = Activity(act['name'].strip(), act['capacity'], act['start'], act['end'])
+        start = datetime.fromisoformat(act['start'])
+        end = datetime.fromisoformat(act['end'])
+        a = Activity(act['name'].strip(), act['capacity'], start, end)
         activities.append(a)
         orgas.append(act['orgas'])
 

@@ -472,9 +472,9 @@ class MatchResult:
             else:
                 more += 1
             activity_names = [a.name for a in act]
-            if p.ranked_activity_names[0] not in activity_names:
+            if p.initial_activity_names != [] and p.initial_activity_names[0] not in activity_names:
                 no_best_choice.append(p)
-            for name in p.ranked_activity_names[:3]:
+            for name in p.initial_activity_names[:3]:
                 if name in activity_names:
                     top_3_choice += 1
 

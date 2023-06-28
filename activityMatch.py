@@ -159,6 +159,28 @@ class Player:
         for a in set(conflicting):
             self.wishes.remove(a)
 
+        # Blacklist constraint when the player does not want to play with an
+        # organizer.
+        blacklist = [a for a in self.wishes if
+                     set(a.orgas).intersection(set(self.blacklist)) != set()]
+        if verbose and blacklist:
+            print("Found wishes with blacklist constraint with an organizer :")
+            for a in set(conflicting):
+                print(f"- {a}")
+        for a in set(blacklist):
+            self.wishes.remove(a)
+
+        # Blacklist constraints when an organizer does not want to play with a
+        # player.
+        blacklist = [a for a in self.wishes if
+                     any(o for o in a.orgas if self in o.blacklist)]
+        if verbose and blacklist:
+            print("Found wishes with blacklist constraint with an organizer :")
+            for a in set(blacklist):
+                print(f"- {a}")
+        for a in set(blacklist):
+            self.wishes.remove(a)
+
         for w in self.wishes:
             if self.ranked_activity_names == [] or \
                self.ranked_activity_names[-1] != w.name:

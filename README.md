@@ -1,6 +1,24 @@
 # MurderWeekMatching
 
-Un programme pour effectuer l'attribution des murders à la murder week.
+Un programme permettant d'effectuer l'affectation de joueureuses à des activités.
+
+Le programme prend en entrée un planning d'activités, et pour chaque joueureuses, une liste de choix ordonnés et des contraintes.
+
+## Contraintes
+
+**Limites d'inscriptions :**
+- Les activités peuvent avoir un nombre maximal de participant·es.
+- Les joueureuses peuvent avoir un nombre d'activités idéal, et un nombre d'activités maximal.
+
+**Contraintes temporelles :**
+- Les joueureuses peuvent demander à ne pas participer à deux activités le même
+  jour.
+- Les joueureuses peuvent demander à ne pas participer et organiser le même
+  jour.
+- Les joueureuses peuvent demander à ne pas participer deux jours de suite, trois jours de suite, ou quatre jours et plus de suite.
+- Les joueureuses peuvent demander à ne pas participer à deux activités un soir et le lendemain matin.
+
+Également, les joueureuses peuvent demander à ne pas participer à la même activité qu'un·e autre joueureuse. Enfin, l'algorithme s'assure qu'un·e joueureuse ne joue pas ou ne participe pas à deux activités en même temps.
 
 ## Comment utiliser ce programme ?
 
@@ -21,7 +39,15 @@ Pour faire tourner le programme, il faut utiliser deux fichiers, au format CSV 
 
 Pour comprendre le format, vous pouvez vous aider des fichiers en exemple `data/format_standard_activites.csv` et `data/format_standard_inscriptions.csv`.
 
-## Bibliothèques nécessaires ##
+## Fichiers de sortie
+
+Le programme extrait deux fichiers CSV en sortie. Le premier fichiers donne pour chaque activité la liste des joueureuses et des organisateurices (avec possibilité d'enlever). Le but est d'avoir un fichier facilement copiable dans un tableur.
+
+Le deuxième fichier donne pour chaque joueureuses la liste des activités où iel est pris·e, refusée·e, indisponible et ou iel organise, ainsi que leurs horaires et rang dans le classement de læ joueureuse. Ce fichier n'a pas vocation à être diffusé. Il sert à avoir une idée des joueureuses qui sont plus ou moins avantagé·e par l'algorithme, pour pouvoir éventuellement rééquilibrer.
+
+Note : ce dernier fichier indique également le nombre d'activité sous la forme "*nombre*/*ideal*, max=*max*". Ainsi, lorsqu'un·e joueureuse a eu plus d'activités que demandé, on peut avoir une indication de la forme "3/2, max=4". Ça peut être perturbant, mais c'est un comportement normal.
+
+## Bibliothèques nécessaires
 
 Ce programme nécessite l'utilisation des bibliothèques *pandas* et *Python-MIP*. Vous pouvez les installer à l'aides de la commande :
 ```

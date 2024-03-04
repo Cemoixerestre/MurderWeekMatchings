@@ -47,6 +47,15 @@ Le deuxième fichier donne pour chaque joueureuses la liste des activités où i
 
 Note : ce dernier fichier indique également le nombre d'activité sous la forme "*nombre*/*ideal*, max=*max*". Ainsi, lorsqu'un·e joueureuse a eu plus d'activités que demandé, on peut avoir une indication de la forme "3/2, max=4". Ça peut être perturbant, mais c'est un comportement normal.
 
+## Autres fonctionnalités
+
+La méthode `r0.compare(r1)` permet de comparer deux affectations `r0` et `r1`. Pour chaque activité `a`, les joueureuses qui joue l'activité `a` dans l'affectation `r0` mais pas dans l'affectation `r1` sont indiqué·es avec un symbole `+` et les joueureuses qui jouent dans l'affectation `r1` mais pas dans l'affectation `r0` sont indiqué·es avec un symbole `-`.
+
+**TODO**
+- Comparer deux affectations lorsque le planning n'est pas exactement le même.
+- Extraire les joueureuses disponibles à un créneau donné.
+- Extraire les joueureuses disponibles souhaitant jouer une certaine murder à un créneau donné.
+
 ## Bibliothèques nécessaires
 
 Ce programme nécessite l'utilisation des bibliothèques *pandas* et *Python-MIP*. Vous pouvez les installer à l'aides de la commande :
@@ -71,7 +80,7 @@ Attention cependant, donner trop de contraintes du genre peut rendre le problèm
 Le paramètre $d$ change la nature de la solution. De manière empirique, à l'aide des données d'inscription de la murder week 2022, j'ai pu observer que :
 - Si $d \leq 0.2$, beaucoup de jeux ne sont pas remplis.
 - Si $d \in [0.3, 0.5]$, tous les jeux sont remplis et tout le monde obtient son activité demandée en premier.
-- Si $d \in [0.6, 0.7]$, tous les jeux sont remplis et toutes les personnes sauf une obtiennent leur activité favorite. Plus personne obtiennent le nombre de jeu idéal que pour $d \in [0.3, 0.5]$.
-- Si $d \geq 0.8$, un certain nombre de personnes n'obtiennent pas leur activité demandée en premier.
+- Si $d \in [0.6, 0.7]$, tous les jeux sont remplis et toutes les personnes sauf une obtiennent leur activité favorite. Plus de joueureuses obtiennent le nombre de jeu idéal que pour $d \in [0.3, 0.5]$.
+- Si $d \geq 0.8$, un certain nombre de joueureuses n'obtiennent pas leur activité demandée en premier.
 
 La meilleure solution a été trouvée pour $d = 0.6$ ou $0.7$, en forçant l'affectation à son jeu préféré pour la personne en question.

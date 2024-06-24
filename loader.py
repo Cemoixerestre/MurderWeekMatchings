@@ -28,7 +28,7 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
             continue
         start = datetime.fromisoformat(act['start'])
         end = datetime.fromisoformat(act['end'])
-        a = Activity(act['name'].strip(), act['capacity'], start, end)
+        a = Activity(act['name'].strip(), int(act['capacity']), start, end)
         activities.append(a)
         orgas.append(act['orgas'])
 

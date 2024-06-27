@@ -20,7 +20,7 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
     wish <n> : Activity in rank <n> in their wishlist. These columns MUST be in the right order
     max_games : max number of activities to participate"""
 
-    activities_df = pandas.read_csv(act_path, delimiter=',', quotechar='"')
+    activities_df = pandas.read_csv(act_path, delimiter=';', quotechar='"')
     activities: List[Activity] = []
     orgas: List[str] = []
     for (_, act) in activities_df.iterrows():
@@ -32,15 +32,14 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
         activities.append(a)
         orgas.append(act['orgas'])
 
-    players_df = pandas.read_csv(players_path, delimiter=',', quotechar='"')
+    players_df = pandas.read_csv(players_path, delimiter=';', quotechar='"')
     players: List[Player] = []
-    wishes_columns: List[str] = [c for c in players_df.columns if c.startswith("wish")]
+    wishes_columns: List[str] = [c for c in players_df.columns if c.startswith("Vœu n°")]
     print(f"Detected {len(wishes_columns)} columns containing wishes")
 
-    day_columns: list[str] = [c for c in players_df.columns if
-                              c.split(' ')[0] in WEEK_DAYS]
-
-    time_slots = generate_timeslots_from_column_names(day_columns)
+    time_slots = generate_timeslots_from_column_names(players_df.columns)
+    if verbose:
+        print(f"Detected {len(time_slots)} columns containing a time slot.")
 
     blacklist: Dict[str, List[str]] = {}
     for (_, p) in players_df.iterrows():
@@ -64,7 +63,7 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
 
         max_games = int(p['max_games']) if not pandas.isna(p['max_games']) else float("inf")
         ideal_games = int(p['ideal_games']) if not pandas.isna(p['ideal_games']) else max_games
-        blacklist[name] = str(p['blacklist']).strip().split(';')
+        blacklist[name] = str(p['blacklist']).strip().split(',')
         orga_player_same_day = not pandas.isna(p["Jouer et (co-)organiser dans la même journée"])
 
         # Load time availability and remove wishes when the player is not available

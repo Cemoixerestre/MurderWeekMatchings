@@ -88,5 +88,7 @@ La meilleure solution a été trouvée pour $d = 0.6$ ou $0.7$, en forçant l'af
 # Tester le projet
 Pour tester le projet, lancez la commande suivante :
 ```
-pytest timeslots.py
+pytest timeslots.py tests.py
 ```
+
+**TODO :** déplacer les tests et fichiers de test dans un dossier à part.

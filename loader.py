@@ -86,7 +86,7 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
     
     # Populate the organizers
     for (act, orgas_list) in zip(activities, orgas):
-        for name in orgas_list.split(';'):
+        for name in orgas_list.split(','):
             player = find_player_by_name(name.strip(), players)
             if player is not None:
                 act.add_orga(player)

@@ -80,7 +80,7 @@ class Player:
     ACTIVE_PLAYERS = 0
 
     def __init__(self, name: str,
-                 wishes: List[Activity],
+                 initial_activity_names: List[Activity],
                  non_availabilities: List[TimeSlot],
                  max_activities: Optional[int] = None,
                  ideal_activities: Optional[int] = None,
@@ -91,8 +91,8 @@ class Player:
         Player.ACTIVE_PLAYERS += 1
 
         self.name = name
-        self.wishes = wishes
-        self.initial_activity_names: List[str] = []
+        self.wishes: List[Activity] = []
+        self.initial_activity_names = initial_activity_names
         self.ranked_activity_names: List[str] = []
         self.non_availability: List[TimeSlot] = non_availabilities
         self.max_activities = max_activities
@@ -113,6 +113,20 @@ class Player:
     def add_orga(self, activity: Activity) -> None:
         self.organizing.append(activity)
 
+    def populate_wishes(self, activities: List[Activity]) -> None:
+        """
+        Add a wish for any activity mentionned in the list of activity names.
+        As an activity can be organized several times, several wishes of the
+        same name may be added.
+        """
+        for act_name in self.initial_activity_names:
+            act = [act for act in activities if act.name == act_name.strip()]
+            if act == []:
+                print(f"WARNING. Could not find activity {act_name} in the activity list. "
+                       "Check your activity file.")
+            else:
+                self.wishes.extend(act)
+
     def filter_availability(self, verbose:bool = False) -> None:
         """Function called at the beginning to filter impossible wishes.
 
@@ -124,11 +138,6 @@ class Player:
         This procedure is called once after the initialization of players
         and activities.
         """
-        for w in self.wishes:
-            if self.initial_activity_names == [] or \
-               self.initial_activity_names[-1] != w.name:
-                self.initial_activity_names.append(w.name)
-
         if not self.orga_player_same_day:
             activity_when_orga = [a for a in self.wishes for o in self.organizing
                                   if a.date() == o.date()]
@@ -434,6 +443,35 @@ class Matcher:
         player = self.find_player_by_name(name)
         assert player.ideal_activities <= nb <= player.max_activities
         player.nb_activities.ub = nb
+
+    # Extraction of data about availability
+    def get_available_players(
+        self,
+        slot: TimeSlot,
+        activity: Option[str]) -> List[Player]:
+        """Return the list of players available at a given time slot and an
+        activity (if the latter is provided)."""
+        available = []
+        for player in self.players:
+            if any(na for na in player.non_availability if na.overlaps(slot)):
+                # player is not available at the slot
+                continue
+            if activity is not None:
+                if activity not in player.initial_activity_names:
+                    # player does not wish to play the activity
+                    continue
+            
+            available.append(player)
+
+        return available
+
+    def print_available_players(self, slot: TimeSlot, activity: Option[str]):
+        if activity is None:
+            print(f"Players available at slot {slot}:")
+        else:
+            print(f"Players available at slot {slot} for activity {activity}:")
+        for p in self.get_available_players(slot, activity):
+            print(f"- {p}")
 
 class MatchResult:
     def __init__(self, players: List[Player], activities: List[Activity]):

@@ -1,9 +1,10 @@
 from typing import List
 from pathlib import Path
+from datetime import datetime
 
 from activityMatch import Matcher
 from loader import load_activities_and_players
-from timeslots import set_year
+from timeslots import set_year, TimeSlot
 
 def test_night_then_morning():
     set_year("2024")
@@ -28,3 +29,26 @@ def test_night_then_morning():
     # gap of more than 12h between Arcane and Hôtel AZ, he can play both.
     pipin = matcher.find_player_by_name("Pipin")
     assert len(res.activities[pipin]) == 2
+
+
+def test_get_availability():
+    set_year("2024")
+    activities, players = load_activities_and_players(
+            Path('test-input/empty-activities.csv'),
+            Path('test-input/get-availability-inscriptions.csv'))
+
+    matcher = Matcher(players, activities, 0.6)
+    slot = TimeSlot(
+        None,
+        datetime.fromisoformat("2024-08-24 19:00"),
+        datetime.fromisoformat("2024-08-25 02:00")
+    )
+
+    mion = matcher.find_player_by_name("Mion Sonozaki")
+    keiichi = matcher.find_player_by_name("Keiichi Maebara")
+    rena = matcher.find_player_by_name("Rena Ryuugu")
+
+    # Keiichi is not available on the night, he cannot play on this slot.
+    assert set(matcher.get_available_players(slot, None)) == {mion, rena}
+    # Rena is available on this slot but she doesn't want to play Braquage.
+    assert matcher.get_available_players(slot, "Braquage") == [mion]

@@ -111,6 +111,7 @@ def generate_timeslots_from_column_names(column_names: List[str]) -> Dict[str, T
 
     return res
 
+# TODO: move
 def test_generate_timeslots_from_column_names():
     set_year(2024)
     column_names = [

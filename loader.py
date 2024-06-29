@@ -47,20 +47,7 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
             continue
 
         name = p['name'].strip()
-        # Convert the ranked names into a sorted list of Activities
-        # Be careful, players rank a given activity but one activity may have multiple sessions.
-        # So we get all the activities with this name and add them in order to the wishlist
-        wishes = []
-        for act_name in p[wishes_columns]:
-            if pandas.isna(act_name):
-                continue
-            act = [act for act in activities if act.name == act_name.strip()]
-            if act == []:
-                print(f"WARNING. Could not find activity {act_name} in the activity list. "
-                       "Check your activity file.")
-            else:
-                wishes.extend(act)
-
+        activity_names = [act_name for act_name in p[wishes_columns] if not pandas.isna(act_name)]
         max_games = int(p['max_games']) if not pandas.isna(p['max_games']) else float("inf")
         ideal_games = int(p['ideal_games']) if not pandas.isna(p['ideal_games']) else max_games
         blacklist[name] = str(p['blacklist']).strip().split(',')
@@ -72,8 +59,10 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
         # Generate constraints
         constraints = set(cons for (col, cons) in CONSTRAINT_NAMES.items() if pandas.isna(p[col]))
 
-        players.append(Player(name, wishes, non_availabilities, max_activities=max_games, ideal_activities=ideal_games,
-                              constraints=constraints, orga_player_same_day=orga_player_same_day))
+        player = Player(name, activity_names, non_availabilities, max_activities=max_games, ideal_activities=ideal_games,
+                        constraints=constraints, orga_player_same_day=orga_player_same_day)
+        player.populate_wishes(activities)
+        players.append(player)
 
     # Now that the players are created, populate the blacklists
     for (name, bl_names) in blacklist.items():

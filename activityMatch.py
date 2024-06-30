@@ -67,13 +67,19 @@ NIGHT_THEN_MORNING = 1
 TWO_CONSECUTIVE_DAYS = 2
 THREE_CONSECUTIVE_DAYS = 3
 MORE_CONSECUTIVE_DAYS = 4
+PLAY_ORGA_SAME_DAY = 5
+PLAY_ORGA_TWO_CONSECUTIVE_DAYS = 6
 
+# TODO: treat "play and organize the same day" like other constraints.
 CONSTRAINT_NAMES = {
     "Jouer deux jeux dans la même journée": TWO_SAME_DAY,
     "Jouer un soir et le lendemain matin": NIGHT_THEN_MORNING,
     "Jouer deux jours consécutifs": TWO_CONSECUTIVE_DAYS,
     "Jouer trois jours consécutifs": THREE_CONSECUTIVE_DAYS,
-    "Jouer plus de trois jours consécutifs": MORE_CONSECUTIVE_DAYS
+    "Jouer plus de trois jours consécutifs": MORE_CONSECUTIVE_DAYS,
+    #"Jouer et (co-)organiser dans la même journée": PLAY_ORGA_SAME_DAY,
+    "Jouer et (co-)organiser deux jours consécutifs":
+        PLAY_ORGA_TWO_CONSECUTIVE_DAYS
 }
 
 # Blacklists management
@@ -161,6 +167,18 @@ class Player:
                     print(f"- {a}")
 
             for a in set(activity_when_orga):
+                self.wishes.remove(a)
+
+        if PLAY_ORGA_TWO_CONSECUTIVE_DAYS in self.constraints:
+            activity_orga_consecutive = [a for a in self.wishes
+                                         for o in self.organizing
+                                         if abs(a.date() - o.date()).days <= 1]
+            if verbose and activity_orga_consecutive:
+                print("Found wishes and activities on consecutive days :")
+                for a in set(activity_orga_consecutive):
+                    print(f"- {a}")
+
+            for a in activity_orga_consecutive:
                 self.wishes.remove(a)
 
         organizing = [a for a in self.wishes for o in self.organizing

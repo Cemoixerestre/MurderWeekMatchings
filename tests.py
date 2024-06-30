@@ -91,3 +91,22 @@ def test_blacklist():
     # Garnet doesn't want to organize for Peridot
     arcane = matcher.find_activity_by_name("Arcane")[0]
     assert peridot not in res.players[arcane]
+
+def test_orga_player_consecutive_days():
+    set_year("2024")
+    activities, players = load_activities_and_players(
+            Path('test-input/play-orga-consecutive-days-activities.csv'),
+            Path('test-input/play-orga-consecutive-days-inscriptions.csv'))
+
+    matcher = Matcher(players, activities, 0.6)
+
+    res = matcher.solve(verbose=True)
+    res.print_players_status()
+    res.print_activities_status()
+
+    luz = matcher.find_player_by_name("Luz Noceda")
+    assert len(res.activities[luz]) == 3
+
+    # Amity cannot play on 24-08 and 26-08 because of her organization
+    amity = matcher.find_player_by_name("Amity Blight")
+    assert len(res.activities[amity]) == 1

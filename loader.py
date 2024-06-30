@@ -3,7 +3,7 @@ import pandas
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 
-from activityMatch import Activity, Player, CONSTRAINT_NAMES
+from activityMatch import Activity, Player, CONSTRAINT_NAMES, BLACKLIST_KINDS
 from timeslots import generate_timeslots_from_column_names, WEEK_DAYS
 
 def load_activities_and_players(act_path: Path, players_path: Path, verbose=True) -> Tuple[List[Activity], List[Player]]:
@@ -41,7 +41,8 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
     if verbose:
         print(f"Detected {len(time_slots)} columns containing a time slot.")
 
-    blacklist: Dict[str, List[str]] = {}
+    # TODO: replace these maps with attributes in the Player class.
+    blacklist : Dict[Tuple[Player, int], List[str]] = {}
     for (_, p) in players_df.iterrows():
         if pandas.isna(p['name']):
             continue
@@ -50,7 +51,6 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
         activity_names = [act_name for act_name in p[wishes_columns] if not pandas.isna(act_name)]
         max_games = int(p['max_games']) if not pandas.isna(p['max_games']) else float("inf")
         ideal_games = int(p['ideal_games']) if not pandas.isna(p['ideal_games']) else max_games
-        blacklist[name] = str(p['blacklist']).strip().split(',')
         orga_player_same_day = not pandas.isna(p["Jouer et (co-)organiser dans la même journée"])
 
         # Load time availability and remove wishes when the player is not available
@@ -61,21 +61,24 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
 
         player = Player(name, activity_names, non_availabilities, max_activities=max_games, ideal_activities=ideal_games,
                         constraints=constraints, orga_player_same_day=orga_player_same_day)
+        
+        # Blacklists information:
+        for col_name, bl_kind in BLACKLIST_KINDS.items():
+            names = str(p[col_name]).strip().split(',')
+            names = [name for name in names if name != '' and name != 'nan']
+            blacklist[player, bl_kind] = names
         player.populate_wishes(activities)
         players.append(player)
 
     # Now that the players are created, populate the blacklists
-    for (name, bl_names) in blacklist.items():
-        player = [pl for pl in players if pl.name == name][0]
-        bl = [find_player_by_name(b, players) for b in bl_names if b != '' and b != 'nan']
-
-        for pl in bl:
-            if pl is not None:
-                player.add_blacklist_player(pl)
+    for (player, bl_kind), names in blacklist.items():
+        for b in names:
+            blacklisted = find_player_by_name(b, players)
+            player.add_blacklist_players(blacklisted, bl_kind)
     
     # Populate the organizers
     for (act, orgas_list) in zip(activities, orgas):
-        for name in orgas_list.split(','):
+        for name in orgas_list.split(';'):
             player = find_player_by_name(name.strip(), players)
             if player is not None:
                 act.add_orga(player)
@@ -91,6 +94,7 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
     return (activities, players)
 
 
+# TODO: doublon de Player.find_player_by_name(), retirer
 def find_player_by_name(name: str, players: List[Player]) -> Optional[Player]:
     p = [pl for pl in players if pl.name == name]
     if not p:

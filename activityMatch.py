@@ -76,6 +76,19 @@ CONSTRAINT_NAMES = {
     "Jouer plus de trois jours consécutifs": MORE_CONSECUTIVE_DAYS
 }
 
+# Blacklists management
+# TODO: create a type alias for blacklist kinds, for example with an
+# enumeration?
+DONT_PLAY_WITH = 0
+DONT_ORGANIZE_FOR = 1
+DONT_BE_ORGANIZED_BY = 2
+
+BLACKLIST_KINDS = {
+    "Ne pas jouer avec": DONT_PLAY_WITH,
+    "Ne pas organiser pour": DONT_ORGANIZE_FOR,
+    "Ne pas être organisée par": DONT_BE_ORGANIZED_BY
+}
+
 class Player:
     ACTIVE_PLAYERS = 0
 
@@ -107,7 +120,8 @@ class Player:
         # maximal number of activities.
         self.nb_activites: Option[Var] = None
 
-        self.blacklist: List[Player] = []
+        self.blacklist: Dict[int, Set[Player]] = \
+                        {bl_kind:set() for bl_kind in BLACKLIST_KINDS.values()}
         self.organizing: List[Activity] = []
 
     def add_orga(self, activity: Activity) -> None:
@@ -170,26 +184,34 @@ class Player:
 
         # Blacklist constraint when the player does not want to play with an
         # organizer.
-        blacklist = [a for a in self.wishes if
-                     set(a.orgas).intersection(set(self.blacklist)) != set()]
-        if verbose and blacklist:
-            print("Found wishes with blacklist constraint with an organizer :")
-            for a in set(conflicting):
-                print(f"- {a}")
-        for a in set(blacklist):
-            self.wishes.remove(a)
+        blacklisted_wishes = []
+        for w in self.wishes:
+            blacklisted_orgas = set(self.blacklist[DONT_BE_ORGANIZED_BY])
+            blacklisted_orgas &= set(w.orgas)
+            if blacklisted_orgas:
+                if verbose:
+                    print(f'- Wish "{w}" removed because the game is organized '
+                          f'by blacklisted organizers: {blacklisted_orgas}')
+                blacklisted_wishes.append(w)
+        for w in set(blacklisted_wishes):
+            self.wishes.remove(w)
 
         # Blacklist constraints when an organizer does not want to play with a
         # player.
-        blacklist = [a for a in self.wishes if
-                     any(o for o in a.orgas if self in o.blacklist)]
-        if verbose and blacklist:
-            print("Found wishes with blacklist constraint with an organizer :")
-            for a in set(blacklist):
-                print(f"- {a}")
-        for a in set(blacklist):
-            self.wishes.remove(a)
+        blacklisted_wishes = []
+        for w in self.wishes:
+            blacklisting_orgas = [orga for orga in w.orgas
+                                  if self in orga.blacklist[DONT_ORGANIZE_FOR]]
+            if blacklisting_orgas:
+                if verbose:
+                    print(f'- Wish "{w}" removed because the game is organized '
+                          f'by blacklisted organizers: {blacklisting_orgas}')
+                blacklisted_wishes.append(w)
+        for w in set(blacklisted_wishes):
+            self.wishes.remove(w)
 
+        # Clearing up activity names only to keep those where the player is
+        # available:
         for w in self.wishes:
             if self.ranked_activity_names == [] or \
                self.ranked_activity_names[-1] != w.name:
@@ -213,9 +235,9 @@ class Player:
     def __repr__(self):
         return f"{self.id} | {self.name}"
 
-    def add_blacklist_player(self, player: Player) -> None:
-        """Create a blacklist conflict between two players."""
-        self.blacklist.append(player)
+    def add_blacklist_players(self, players: Player, bl_kind: int) -> None:
+        """Create a blacklit conflict between two players."""
+        self.blacklist[bl_kind].add(players)
 
 
 class Matcher:
@@ -312,7 +334,7 @@ class Matcher:
             
         # Blacklist constraints:
         for p in self.players:
-            for q in p.blacklist:
+            for q in p.blacklist[DONT_PLAY_WITH]:
                 for a in self.activities:
                     if a in p.wishes and a in q.wishes:
                         self.model += self.vars[p, a] + self.vars[q, a] <= 1

@@ -77,7 +77,7 @@ CONSTRAINT_NAMES = {
     "Jouer deux jours consécutifs": TWO_CONSECUTIVE_DAYS,
     "Jouer trois jours consécutifs": THREE_CONSECUTIVE_DAYS,
     "Jouer plus de trois jours consécutifs": MORE_CONSECUTIVE_DAYS,
-    #"Jouer et (co-)organiser dans la même journée": PLAY_ORGA_SAME_DAY,
+    "Jouer et (co-)organiser dans la même journée": PLAY_ORGA_SAME_DAY,
     "Jouer et (co-)organiser deux jours consécutifs":
         PLAY_ORGA_TWO_CONSECUTIVE_DAYS
 }
@@ -103,8 +103,7 @@ class Player:
                  non_availabilities: List[TimeSlot],
                  max_activities: Optional[int] = None,
                  ideal_activities: Optional[int] = None,
-                 constraints: Optional[Set[Constraint]] = None,
-                 orga_player_same_day: bool = True):
+                 constraints: Optional[Set[Constraint]] = None):
         # Auto number the players
         self.id = Player.ACTIVE_PLAYERS
         Player.ACTIVE_PLAYERS += 1
@@ -120,7 +119,6 @@ class Player:
                f"Player {name}: the number of ideal activities is larger " \
                f"than the maximal number of activities."
         self.constraints: Set[Constraint] = constraints if constraints is not None else set()
-        self.orga_player_same_day = orga_player_same_day
         # A ILP variable representing the number of activities of the player.
         # It is bounded first by the ideal number of activities, then by the
         # maximal number of activities.
@@ -158,7 +156,7 @@ class Player:
         This procedure is called once after the initialization of players
         and activities.
         """
-        if not self.orga_player_same_day:
+        if PLAY_ORGA_SAME_DAY in self.constraints:
             activity_when_orga = [a for a in self.wishes for o in self.organizing
                                   if a.date() == o.date()]
             if verbose and activity_when_orga:

@@ -110,3 +110,23 @@ def test_orga_player_consecutive_days():
     # Amity cannot play on 24-08 and 26-08 because of her organization
     amity = matcher.find_player_by_name("Amity Blight")
     assert len(res.activities[amity]) == 1
+
+def test_orga_player_same_day():
+    set_year("2024")
+    activities, players = load_activities_and_players(
+            Path('test-input/play-orga-same-day-activities.csv'),
+            Path('test-input/play-orga-same-day-inscriptions.csv'))
+
+    matcher = Matcher(players, activities, 0.6)
+
+    res = matcher.solve(verbose=True)
+    res.print_players_status()
+    res.print_activities_status()
+
+    sayaka = matcher.find_player_by_name("Sayaka Miki")
+    assert len(res.activities[sayaka]) == 1
+
+    # Kyoko does not play and organize the same day. Therefore, she cannot play
+    # "A magical party".
+    kyoko = matcher.find_player_by_name("Kyoko Sakura")
+    assert len(res.activities[kyoko]) == 0

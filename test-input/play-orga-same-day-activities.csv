@@ -1,3 +1,3 @@
-name;capacity;start;end;orgas
-A Magical Party;10;2024-08-24 10:00:00;2024-08-24 11:00:00;Madoka Kaname
-Encore un dernier vœu;10;2024-08-24 12:00:00;2024-08-24 14:00:00;Kyoko Sakura,Sayaka Miki
+name,capacity,start,end,orgas
+A Magical Party,10,2024-08-24 10:00:00,2024-08-24 11:00:00,Madoka Kaname
+Encore un dernier vœu,10,2024-08-24 12:00:00,2024-08-24 14:00:00,Kyoko Sakura;Sayaka Miki

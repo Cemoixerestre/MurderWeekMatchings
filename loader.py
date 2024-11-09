@@ -20,7 +20,7 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
     wish <n> : Activity in rank <n> in their wishlist. These columns MUST be in the right order
     max_games : max number of activities to participate"""
 
-    activities_df = pandas.read_csv(act_path, delimiter=';', quotechar='"')
+    activities_df = pandas.read_csv(act_path, delimiter=',', quotechar='"')
     activities: List[Activity] = []
     orgas: List[str] = []
     for (_, act) in activities_df.iterrows():
@@ -32,7 +32,7 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
         activities.append(a)
         orgas.append(act['orgas'])
 
-    players_df = pandas.read_csv(players_path, delimiter=';', quotechar='"')
+    players_df = pandas.read_csv(players_path, delimiter=',', quotechar='"')
     players: List[Player] = []
     wishes_columns: List[str] = [c for c in players_df.columns if c.startswith("Vœu n°")]
     print(f"Detected {len(wishes_columns)} columns containing wishes")
@@ -65,7 +65,7 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
         
         # Blacklists information:
         for col_name, bl_kind in BLACKLIST_KINDS.items():
-            names = str(p[col_name]).strip().split(',')
+            names = str(p[col_name]).strip().split(';')
             names = [name for name in names if name != '' and name != 'nan']
             blacklist[player, bl_kind] = names
         player.populate_wishes(activities)
@@ -79,7 +79,7 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
     
     # Populate the organizers
     for (act, orgas_list) in zip(activities, orgas):
-        for name in orgas_list.split(','):
+        for name in orgas_list.split(';'):
             player = find_player_by_name(name.strip(), players)
             if player is not None:
                 act.add_orga(player)

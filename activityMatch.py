@@ -168,12 +168,12 @@ class Player:
                 self.wishes.remove(a)
 
         if PLAY_ORGA_TWO_CONSECUTIVE_DAYS in self.constraints:
-            activity_orga_consecutive = [a for a in self.wishes
+            activity_orga_consecutive = {a for a in self.wishes
                                          for o in self.organizing
-                                         if abs(a.date() - o.date()).days <= 1]
+                                         if abs(a.date() - o.date()).days <= 1}
             if verbose and activity_orga_consecutive:
                 print("Found wishes and activities on consecutive days :")
-                for a in set(activity_orga_consecutive):
+                for a in activity_orga_consecutive:
                     print(f"- {a}")
 
             for a in activity_orga_consecutive:

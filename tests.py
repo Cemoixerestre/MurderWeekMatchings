@@ -13,6 +13,8 @@ def test_load():
             Path('data/format_standard_activites.csv'),
             Path('data/format_standard_inscriptions.csv'))
 
+    print(activities)
+
 def test_night_then_morning():
     set_year("2024")
     activities, players = load_activities_and_players(

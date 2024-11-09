@@ -48,10 +48,10 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
             continue
 
         name = p['name'].strip()
-        activity_names = [act_name for act_name in p[wishes_columns] if not pandas.isna(act_name)]
+        activity_names = [act_name.strip() for act_name in p[wishes_columns]
+                          if not pandas.isna(act_name)]
         max_games = int(p['max_games']) if not pandas.isna(p['max_games']) else float("inf")
         ideal_games = int(p['ideal_games']) if not pandas.isna(p['ideal_games']) else max_games
-        orga_player_same_day = not pandas.isna(p["Jouer et (co-)organiser dans la même journée"])
 
         # Load time availability and remove wishes when the player is not available
         non_availabilities = [slot for (col, slot) in time_slots.items() if pandas.isna(p[col])]
@@ -59,8 +59,9 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
         # Generate constraints
         constraints = set(cons for (col, cons) in CONSTRAINT_NAMES.items() if pandas.isna(p[col]))
 
-        player = Player(name, activity_names, non_availabilities, max_activities=max_games, ideal_activities=ideal_games,
-                        constraints=constraints, orga_player_same_day=orga_player_same_day)
+        player = Player(name, activity_names, non_availabilities,
+                        max_activities=max_games, ideal_activities=ideal_games,
+                        constraints=constraints)
         
         # Blacklists information:
         for col_name, bl_kind in BLACKLIST_KINDS.items():
@@ -78,7 +79,7 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
     
     # Populate the organizers
     for (act, orgas_list) in zip(activities, orgas):
-        for name in orgas_list.split(';'):
+        for name in orgas_list.split(','):
             player = find_player_by_name(name.strip(), players)
             if player is not None:
                 act.add_orga(player)

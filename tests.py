@@ -10,8 +10,8 @@ def test_load():
     """Just to try the standard format files."""
     set_year("2024")
     activities, players = load_activities_and_players(
-            Path('data/format_standard_activites.csv'),
-            Path('data/format_standard_inscriptions.csv'))
+            Path('format_standard_activites.csv'),
+            Path('format_standard_inscriptions.csv'))
 
     print(activities)
 

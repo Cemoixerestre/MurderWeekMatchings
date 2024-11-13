@@ -2,9 +2,9 @@ from typing import List
 from pathlib import Path
 from datetime import datetime
 
-from activityMatch import Matcher
+from activityMatch import Matcher, get_available_players, print_dispos
 from loader import load_activities_and_players
-from timeslots import set_year, TimeSlot
+from timeslots import set_year, TimeSlot, generate_timeslot_from_column_name
 
 def test_load():
     """Just to try the standard format files."""
@@ -42,25 +42,26 @@ def test_night_then_morning():
 
 def test_get_availability():
     set_year("2024")
-    activities, players = load_activities_and_players(
+    _, players = load_activities_and_players(
             Path('test-input/empty-activities.csv'),
             Path('test-input/get-availability-inscriptions.csv'))
 
-    matcher = Matcher(players, activities, 0.6)
-    slot = TimeSlot(
-        None,
-        datetime.fromisoformat("2024-08-24 19:00"),
-        datetime.fromisoformat("2024-08-25 02:00")
+    slot = generate_timeslot_from_column_name(
+        "Nuit de samedi 24/08 à dimanche 25/08"
     )
 
-    mion = matcher.find_player_by_name("Mion Sonozaki")
-    keiichi = matcher.find_player_by_name("Keiichi Maebara")
-    rena = matcher.find_player_by_name("Rena Ryuugu")
+    mion = [p for p in players if p.name == "Mion Sonozaki"][0]
+    keiichi = [p for p in players if p.name == "Keiichi Maebara"][0]
+    rena = [p for p in players if p.name == "Rena Ryuugu"][0]
 
     # Keiichi is not available on the night, he cannot play on this slot.
-    assert set(matcher.get_available_players(slot, None)) == {mion, rena}
+    assert set(get_available_players(players, slot, None)) == {mion, rena}
     # Rena is available on this slot but she doesn't want to play Braquage.
-    assert matcher.get_available_players(slot, "Braquage") == [mion]
+    assert get_available_players(players, slot, "Braquage") == [mion]
+
+    # Just check that `print_dispos` runs without errors. We don't check
+    # what's printed.
+    print_dispos(players, "Arcane", True)
 
 def test_blacklist():
     set_year("2024")

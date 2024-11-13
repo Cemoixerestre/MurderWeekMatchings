@@ -4,7 +4,7 @@ from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 
 from activityMatch import Activity, Player, CONSTRAINT_NAMES, BLACKLIST_KINDS
-from timeslots import generate_timeslots_from_column_names, WEEK_DAYS
+from timeslots import generate_timeslots_from_column_names
 
 def load_activities_and_players(act_path: Path, players_path: Path, verbose=True) -> Tuple[List[Activity], List[Player]]:
     """Loading the activities and the players.
@@ -53,13 +53,13 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
         max_games = int(p['max_games']) if not pandas.isna(p['max_games']) else float("inf")
         ideal_games = int(p['ideal_games']) if not pandas.isna(p['ideal_games']) else max_games
 
-        # Load time availability and remove wishes when the player is not available
-        non_availabilities = [slot for (col, slot) in time_slots.items() if pandas.isna(p[col])]
+        # Map each slot to a boolean: true if the player is available, false otherwise.
+        availability = {slot:not pandas.isna(p[col]) for (col, slot) in time_slots.items()}
 
         # Generate constraints
         constraints = set(cons for (col, cons) in CONSTRAINT_NAMES.items() if pandas.isna(p[col]))
 
-        player = Player(name, activity_names, non_availabilities,
+        player = Player(name, activity_names, availability,
                         max_activities=max_games, ideal_activities=ideal_games,
                         constraints=constraints)
         

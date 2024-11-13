@@ -25,7 +25,7 @@ class Activity:
 
         self.name: str = name
         self.capacity: int = capacity
-        self.timeslot = TimeSlot(None, start, end)
+        self.timeslot = TimeSlot(start, end)
         # An ILP variable representing the number of players playing the
         # activity. It is bounded by the capacity.
         self.nb_players: Option[Var] = None
@@ -53,7 +53,12 @@ class Activity:
         return self.timeslot.overlaps(slot)
 
     def date(self) -> datetime:
-        return self.timeslot.start.date()
+        # There is a possibility that the activity starts after midnight. In
+        # this case, we take for the date the day before.
+        # As no activity starts between 4AM and 8AM, we can just substract
+        # 6 hours and obtain the start date.
+        start_date = self.timeslot.start - timedelta(hours=6)
+        return start_date.date()
 
     def night_then_morning(self, other: Activity) -> bool:
         if other.date() - self.date() != timedelta(days=1):
@@ -100,11 +105,12 @@ class Player:
 
     def __init__(self, name: str,
                  initial_activity_names: List[Activity],
-                 non_availabilities: List[TimeSlot],
+                 availabilities: Dict[TimeSlot, bool],
                  max_activities: Optional[int] = None,
                  ideal_activities: Optional[int] = None,
                  constraints: Optional[Set[Constraint]] = None):
         # Auto number the players
+        # Note: not used anymore, could be deleted.
         self.id = Player.ACTIVE_PLAYERS
         Player.ACTIVE_PLAYERS += 1
 
@@ -112,7 +118,7 @@ class Player:
         self.wishes: List[Activity] = []
         self.initial_activity_names = initial_activity_names
         self.ranked_activity_names: List[str] = []
-        self.non_availability: List[TimeSlot] = non_availabilities
+        self.availability: Dict[TimeSlot, bool] = availabilities
         self.max_activities = max_activities
         self.ideal_activities = ideal_activities
         assert ideal_activities <= max_activities, \
@@ -189,8 +195,9 @@ class Player:
         for a in set(organizing):
             self.wishes.remove(a)
 
-        conflicting = [a for a in self.wishes for slot in self.non_availability
-                       if a.overlaps(slot)]
+        conflicting = [a for a in self.wishes
+                       for (slot, available) in self.availability.items()
+                       if a.overlaps(slot) and not available]
         if verbose and conflicting:
             print("Found wishes where not available :")
             for a in set(conflicting):
@@ -254,6 +261,42 @@ class Player:
     def add_blacklist_players(self, players: Player, bl_kind: int) -> None:
         """Create a blacklit conflict between two players."""
         self.blacklist[bl_kind].add(players)
+
+
+# Extraction of data about availability
+def get_available_players(
+    players: List[Player],
+    slot: TimeSlot,
+    activity_name: Option[str]) -> List[Player]:
+    """Return the list of players available at a given time slot and an
+    activity. If activity_name is None, returns every players available at that
+    slot.
+
+    slot: Must be one of the slots in the availabiilty
+    """
+    available = []
+    for player in players:
+        if not player.availability[slot]:
+            # player is not available at this slot
+            continue
+        if activity_name is not None:
+            if activity_name not in player.initial_activity_names:
+                # player does not wish to play the activity
+                continue
+
+        available.append(player)
+
+    return available
+
+def print_dispos(players, activity_name: str, disp_available=False):
+    slots = players[0].availability.keys()
+    for slot in slots:
+        pl = get_available_players(players, slot, activity_name)
+        names = [p.name for p in pl]
+        print(f"{slot}\t{len(pl)}\t")
+        if disp_available:
+            print(end="\t")
+            print(*(p.name for p in pl), sep=", ")
 
 
 class Matcher:
@@ -481,35 +524,6 @@ class Matcher:
         player = self.find_player_by_name(name)
         assert player.ideal_activities <= nb <= player.max_activities
         player.nb_activities.ub = nb
-
-    # Extraction of data about availability
-    def get_available_players(
-        self,
-        slot: TimeSlot,
-        activity: Option[str]) -> List[Player]:
-        """Return the list of players available at a given time slot and an
-        activity (if the latter is provided)."""
-        available = []
-        for player in self.players:
-            if any(na for na in player.non_availability if na.overlaps(slot)):
-                # player is not available at the slot
-                continue
-            if activity is not None:
-                if activity not in player.initial_activity_names:
-                    # player does not wish to play the activity
-                    continue
-            
-            available.append(player)
-
-        return available
-
-    def print_available_players(self, slot: TimeSlot, activity: Option[str]):
-        if activity is None:
-            print(f"Players available at slot {slot}:")
-        else:
-            print(f"Players available at slot {slot} for activity {activity}:")
-        for p in self.get_available_players(slot, activity):
-            print(f"- {p}")
 
 class MatchResult:
     def __init__(self, players: List[Player], activities: List[Activity]):

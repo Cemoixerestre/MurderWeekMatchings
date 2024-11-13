@@ -2,6 +2,7 @@ from pathlib import Path
 import pandas
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime
+from warnings import warn
 
 from activityMatch import Activity, Player, CONSTRAINT_NAMES, BLACKLIST_KINDS
 from timeslots import generate_timeslots_from_column_names
@@ -99,7 +100,7 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
 def find_player_by_name(name: str, players: List[Player]) -> Optional[Player]:
     p = [pl for pl in players if pl.name == name]
     if not p:
-        print(f"Could not find player {name}")
+        warn(f"Could not find player {name}")
         return None
     elif len(p) == 1:
         return p[0]

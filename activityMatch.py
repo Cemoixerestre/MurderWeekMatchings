@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from itertools import combinations, product
 import csv
+from warnings import warn
 from mip import Model, Var, OptimizationStatus, maximize, xsum, BINARY, INTEGER
 
 from timeslots import TimeSlot
@@ -146,8 +147,8 @@ class Player:
         for act_name in self.initial_activity_names:
             act = [act for act in activities if act.name == act_name.strip()]
             if act == []:
-                print(f"WARNING. Could not find activity {act_name} in the activity list. "
-                       "Check your activity file.")
+                warn(f"Could not find activity {act_name} in the activity list. "
+                      "Check your activity file.")
             else:
                 self.wishes.extend(act)
 
@@ -515,7 +516,7 @@ class Matcher:
                 continue
             player = self.find_player_by_name(name)
             if (player, activity) not in self.vars:
-                print(f"WARNING: {name} is not playing {activity}")
+                warn(f"{name} is not playing {activity}")
                 continue
             self.vars[player, activity].lb = 1
         print("Players successfully added")

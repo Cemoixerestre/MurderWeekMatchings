@@ -2,8 +2,10 @@ from typing import List
 from pathlib import Path
 import pandas
 import random
-from timeslots import *
 
+import sys
+sys.path.append("src")
+from timeslots import *
 from activityMatch import Matcher, print_dispos
 from loader import load_activities_and_players
 from timeslots import set_year

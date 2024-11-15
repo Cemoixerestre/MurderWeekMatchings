@@ -2,9 +2,32 @@ from typing import List
 from pathlib import Path
 from datetime import datetime
 
+import sys
+sys.path.append('src')
 from activityMatch import Matcher, get_available_players, print_dispos
 from loader import load_activities_and_players
-from timeslots import set_year, TimeSlot, generate_timeslot_from_column_name
+from timeslots import set_year, TimeSlot, generate_timeslot_from_column_name, \
+                      generate_timeslots_from_column_names
+
+def test_generate_timeslots_from_column_names():
+    set_year(2024)
+    column_names = [
+        "Dimanche 25/08 après-midi",
+        "Nuit de lundi 26/08 à mardi 27/08",
+        "Vœu n°3"
+    ]
+    expected = {
+        "Dimanche 25/08 après-midi": TimeSlot(
+            datetime.fromisoformat("2024-08-25 13:00"),
+            datetime.fromisoformat("2024-08-25 18:00")
+        ),
+        "Nuit de lundi 26/08 à mardi 27/08": TimeSlot(
+            datetime.fromisoformat("2024-08-27 00:00"),
+            datetime.fromisoformat("2024-08-27 03:59")
+        )
+    }
+    time_slots = generate_timeslots_from_column_names(column_names)
+    assert time_slots == expected
 
 def test_load():
     """Just to try the standard format files."""
@@ -13,13 +36,11 @@ def test_load():
             Path('format_standard_activites.csv'),
             Path('format_standard_inscriptions.csv'))
 
-    print(activities)
-
 def test_night_then_morning():
     set_year("2024")
     activities, players = load_activities_and_players(
-            Path('test-input/night-then-morning-activities.csv'),
-            Path('test-input/night-then-morning-inscriptions.csv'))
+            Path('test/test-input/night-then-morning-activities.csv'),
+            Path('test/test-input/night-then-morning-inscriptions.csv'))
 
     matcher = Matcher(players, activities, 0.6)
 
@@ -43,8 +64,8 @@ def test_night_then_morning():
 def test_get_availability():
     set_year("2024")
     _, players = load_activities_and_players(
-            Path('test-input/empty-activities.csv'),
-            Path('test-input/get-availability-inscriptions.csv'))
+            Path('test/test-input/empty-activities.csv'),
+            Path('test/test-input/get-availability-inscriptions.csv'))
 
     slot = generate_timeslot_from_column_name(
         "Nuit de samedi 24/08 à dimanche 25/08"
@@ -66,8 +87,8 @@ def test_get_availability():
 def test_blacklist():
     set_year("2024")
     activities, players = load_activities_and_players(
-            Path('test-input/blacklist-activities.csv'),
-            Path('test-input/blacklist-inscriptions.csv'))
+            Path('test/test-input/blacklist-activities.csv'),
+            Path('test/test-input/blacklist-inscriptions.csv'))
 
     matcher = Matcher(players, activities, 0.6)
 
@@ -98,8 +119,8 @@ def test_blacklist():
 def test_orga_player_consecutive_days():
     set_year("2024")
     activities, players = load_activities_and_players(
-            Path('test-input/play-orga-consecutive-days-activities.csv'),
-            Path('test-input/play-orga-consecutive-days-inscriptions.csv'))
+            Path('test/test-input/play-orga-consecutive-days-activities.csv'),
+            Path('test/test-input/play-orga-consecutive-days-inscriptions.csv'))
 
     matcher = Matcher(players, activities, 0.6)
 
@@ -117,8 +138,8 @@ def test_orga_player_consecutive_days():
 def test_orga_player_same_day():
     set_year("2024")
     activities, players = load_activities_and_players(
-            Path('test-input/play-orga-same-day-activities.csv'),
-            Path('test-input/play-orga-same-day-inscriptions.csv'))
+            Path('test/test-input/play-orga-same-day-activities.csv'),
+            Path('test/test-input/play-orga-same-day-inscriptions.csv'))
 
     matcher = Matcher(players, activities, 0.6)
 

@@ -4,6 +4,18 @@ Un programme permettant d'effectuer l'affectation de joueureuses à des activit�
 
 Le programme prend en entrée un planning d'activités, et pour chaque joueureuses, une liste de choix ordonnés et des contraintes.
 
+## Bibliothèques nécessaires
+
+Ce programme nécessite l'utilisation des bibliothèques *pandas* et *Python-MIP*. Vous pouvez les installer à l'aides de la commande :
+```
+pip install pandas mip
+```
+
+Pour tester le projet, il faut installer pytest et lancer la commande suivante :
+```
+pytest test/tests.py
+```
+
 ## Contraintes
 
 **Limites d'inscriptions :**
@@ -55,13 +67,6 @@ La méthode `r0.compare(r1)` permet de comparer deux affectations `r0` et `r1`. 
 - Comparer deux affectations lorsque le planning n'est pas exactement le même.
 - Extraire les joueureuses disponibles à un créneau donné.
 - Extraire les joueureuses disponibles souhaitant jouer une certaine murder à un créneau donné.
-
-## Bibliothèques nécessaires
-
-Ce programme nécessite l'utilisation des bibliothèques *pandas* et *Python-MIP*. Vous pouvez les installer à l'aides de la commande :
-```
-pip install pandas mip
-```
 
 ## Description de l'algorithme
 

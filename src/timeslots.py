@@ -137,24 +137,3 @@ def generate_timeslots_from_column_names(column_names: List[str]) -> Dict[str, T
             res[col] = slot
 
     return res
-
-# TODO: move
-def test_generate_timeslots_from_column_names():
-    set_year(2024)
-    column_names = [
-        "Dimanche 25/08 après-midi",
-        "Nuit de lundi 26/08 à mardi 27/08",
-        "Vœu n°3"
-    ]
-    expected = {
-        "Dimanche 25/08 après-midi": TimeSlot(
-            datetime.fromisoformat("2024-08-25 13:00"),
-            datetime.fromisoformat("2024-08-25 18:00")
-        ),
-        "Nuit de lundi 26/08 à mardi 27/08": TimeSlot(
-            datetime.fromisoformat("2024-08-27 00:00"),
-            datetime.fromisoformat("2024-08-27 03:59")
-        )
-    }
-    time_slots = generate_timeslots_from_column_names(column_names)
-    assert time_slots == expected

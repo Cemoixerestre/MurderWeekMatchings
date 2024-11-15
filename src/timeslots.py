@@ -11,11 +11,9 @@ SLOT_TIMES = {
 }
 NIGHT_SLOT_TIMES = ('00:00', '03:59')
 
-# TODO: keep?
 WEEK_DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
 
 YEAR = "2024"
-MONTH = "08" # TODO: delete
 
 def set_year(year):
     global YEAR
@@ -65,7 +63,7 @@ class TimeSlot:
             return self.name
         start_hour = f"{self.start.hour:02}:{self.start.minute:02}"
         end_hour = f"{self.end.hour:02}:{self.end.minute:02}"
-        return f"{self.start.day:02}/{MONTH} {start_hour}-{end_hour}"
+        return f"{self.start.day:02}/{self.start.month:02} {start_hour}-{end_hour}"
 
     def __eq__(self, other):
         return (self.start, self.end) == (other.start, other.end)

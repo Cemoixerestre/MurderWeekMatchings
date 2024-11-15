@@ -89,11 +89,3 @@ Le paramètre $d$ change la nature de la solution. De manière empirique, à l'a
 - Si $d \geq 0.8$, un certain nombre de joueureuses n'obtiennent pas leur activité demandée en premier.
 
 La meilleure solution a été trouvée pour $d = 0.6$ ou $0.7$, en forçant l'affectation à son jeu préféré pour la personne en question.
-
-# Tester le projet
-Pour tester le projet, lancez la commande suivante :
-```
-pytest timeslots.py tests.py
-```
-
-**TODO :** déplacer les tests et fichiers de test dans un dossier à part.

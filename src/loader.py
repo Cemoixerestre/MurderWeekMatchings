@@ -21,7 +21,7 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
     wish <n> : Activity in rank <n> in their wishlist. These columns MUST be in the right order
     max_games : max number of activities to participate"""
 
-    activities_df = pandas.read_csv(act_path, delimiter=',', quotechar='"')
+    activities_df = pandas.read_csv(act_path, delimiter=',', quotechar='"', keep_default_na=False)
     activities: List[Activity] = []
     orgas: List[str] = []
     for (_, act) in activities_df.iterrows():
@@ -80,6 +80,9 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
     
     # Populate the organizers
     for (act, orgas_list) in zip(activities, orgas):
+        if orgas_list == "":
+            # TODO: warn if no organizers are provided?
+            continue
         for name in orgas_list.split(';'):
             player = find_player_by_name(name.strip(), players)
             if player is not None:

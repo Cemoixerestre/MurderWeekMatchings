@@ -18,7 +18,8 @@ class Activity:
             name: str,
             capacity: int,
             start: datetime,
-            end: datetime
+            end: datetime,
+            orga_names: List[str]
         ):
         # Auto number the activities
         self.id = Activity.ACTIVE_ACTIVITIES
@@ -27,10 +28,12 @@ class Activity:
         self.name: str = name
         self.capacity: int = capacity
         self.timeslot = TimeSlot(start, end)
+        self.orga_names = orga_names
         # An ILP variable representing the number of players playing the
         # activity. It is bounded by the capacity.
         self.nb_players: Option[Var] = None
 
+        # Will be filled later, when the players are loaded.
         self.orgas: List[Player] = []
 
     def create_nb_players_variable(self, model: Model) -> None:
@@ -47,8 +50,12 @@ class Activity:
     def add_player(self, player: Player) -> None:
         self.players.append(player)
 
-    def add_orga(self, orga: Player) -> None:
-        self.orgas.append(orga)
+    def populate_organizers(self, players: List[Player]) -> None:
+        for name in self.orga_names:
+            player = find_player_by_name(name, players)
+            if player is not None:
+                self.orgas.append(player)
+                player.organizing.append(self)
 
     def overlaps(self, slot: TimeSlot) -> bool:
         return self.timeslot.overlaps(slot)
@@ -107,9 +114,10 @@ class Player:
     def __init__(self, name: str,
                  initial_activity_names: List[Activity],
                  availabilities: Dict[TimeSlot, bool],
-                 max_activities: Optional[int] = None,
-                 ideal_activities: Optional[int] = None,
-                 constraints: Optional[Set[Constraint]] = None):
+                 max_activities: Optional[int],
+                 ideal_activities: Optional[int],
+                 constraints: Set[Constraint],
+                 blacklist_names: Dict[int, List[str]]):
         # Auto number the players
         # Note: not used anymore, could be deleted.
         self.id = Player.ACTIVE_PLAYERS
@@ -125,18 +133,19 @@ class Player:
         assert ideal_activities <= max_activities, \
                f"Player {name}: the number of ideal activities is larger " \
                f"than the maximal number of activities."
-        self.constraints: Set[Constraint] = constraints if constraints is not None else set()
+        self.constraints: Set[Constraint] = constraints
+        self.blacklist_names: List[str] = blacklist_names
+
         # A ILP variable representing the number of activities of the player.
         # It is bounded first by the ideal number of activities, then by the
         # maximal number of activities.
         self.nb_activites: Option[Var] = None
 
+        # Blacklists sets are empty, and will be replaced later by players.
         self.blacklist: Dict[int, Set[Player]] = \
                         {bl_kind:set() for bl_kind in BLACKLIST_KINDS.values()}
+        # Will be replaced later by activities.
         self.organizing: List[Activity] = []
-
-    def add_orga(self, activity: Activity) -> None:
-        self.organizing.append(activity)
 
     def populate_wishes(self, activities: List[Activity]) -> None:
         """
@@ -151,6 +160,12 @@ class Player:
                       "Check your activity file.")
             else:
                 self.wishes.extend(act)
+
+    def populate_blacklists(self, players: List[Player]) -> None:
+        for bl_kind, names in self.blacklist_names.items():
+            for name in names:
+                other = find_player_by_name(name, players)
+                self.blacklist[bl_kind].add(other)
 
     def filter_availability(self, verbose:bool = False) -> None:
         """Function called at the beginning to filter impossible wishes.
@@ -259,10 +274,16 @@ class Player:
     def __repr__(self):
         return f"{self.id} | {self.name}"
 
-    def add_blacklist_players(self, players: Player, bl_kind: int) -> None:
-        """Create a blacklit conflict between two players."""
-        self.blacklist[bl_kind].add(players)
 
+def find_player_by_name(name: str, players: List[Player]) -> Optional[Player]:
+    p = [pl for pl in players if pl.name == name]
+    if not p:
+        warn(f"Could not find player {name}")
+        return None
+    elif len(p) == 1:
+        return p[0]
+    else:
+        raise ValueError(f"Several players corresponding to the name {name}")
 
 # Extraction of data about availability
 def get_available_players(

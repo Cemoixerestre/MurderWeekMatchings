@@ -1,318 +1,12 @@
 from __future__ import annotations
 
-from typing import List, Dict, Optional, Tuple, Iterator, Set
-from datetime import datetime, timedelta
-from collections import defaultdict
+from typing import List, Dict, Tuple, Optional
 from itertools import combinations, product
-import csv
-from warnings import warn
+from collections import defaultdict
+from datetime import timedelta
 from mip import Model, Var, OptimizationStatus, maximize, xsum, BINARY, INTEGER
 
-from timeslots import TimeSlot
-
-class Activity:
-    ACTIVE_ACTIVITIES = 0
-
-    def __init__(
-            self,
-            name: str,
-            capacity: int,
-            start: datetime,
-            end: datetime,
-            orga_names: List[str]
-        ):
-        # Auto number the activities
-        self.id = Activity.ACTIVE_ACTIVITIES
-        Activity.ACTIVE_ACTIVITIES += 1
-
-        self.name: str = name
-        self.capacity: int = capacity
-        self.timeslot = TimeSlot(start, end)
-        self.orga_names = orga_names
-        # An ILP variable representing the number of players playing the
-        # activity. It is bounded by the capacity.
-        self.nb_players: Option[Var] = None
-
-        # Will be filled later, when the players are loaded.
-        self.orgas: List[Player] = []
-
-    def create_nb_players_variable(self, model: Model) -> None:
-        self.nb_players = model.add_var(var_type=INTEGER, ub=self.capacity)
-
-    def __repr__(self):
-        return f"{self.id} | {self.name} | " \
-               f"{self.timeslot}"
-
-    def populate_organizers(self, players: List[Player]) -> None:
-        for name in self.orga_names:
-            player = find_player_by_name(name, players)
-            if player is not None:
-                self.orgas.append(player)
-                player.organizing.append(self)
-
-    def overlaps(self, slot: TimeSlot) -> bool:
-        return self.timeslot.overlaps(slot)
-
-    def date(self) -> datetime:
-        # There is a possibility that the activity starts after midnight. In
-        # this case, we take for the date the day before.
-        # As no activity starts between 4AM and 8AM, we can just substract
-        # 6 hours and obtain the start date.
-        start_date = self.timeslot.start - timedelta(hours=6)
-        return start_date.date()
-
-    def night_then_morning(self, other: Activity) -> bool:
-        if other.date() - self.date() != timedelta(days=1):
-            return False
-        return other.timeslot.start - self.timeslot.end <= timedelta(hours=12)
-
-
-# Constraint management
-TWO_SAME_DAY = 0
-NIGHT_THEN_MORNING = 1
-TWO_CONSECUTIVE_DAYS = 2
-THREE_CONSECUTIVE_DAYS = 3
-MORE_CONSECUTIVE_DAYS = 4
-PLAY_ORGA_SAME_DAY = 5
-PLAY_ORGA_TWO_CONSECUTIVE_DAYS = 6
-
-CONSTRAINT_NAMES = {
-    "Jouer deux jeux dans la même journée": TWO_SAME_DAY,
-    "Jouer un soir et le lendemain matin": NIGHT_THEN_MORNING,
-    "Jouer deux jours consécutifs": TWO_CONSECUTIVE_DAYS,
-    "Jouer trois jours consécutifs": THREE_CONSECUTIVE_DAYS,
-    "Jouer plus de trois jours consécutifs": MORE_CONSECUTIVE_DAYS,
-    "Jouer et (co-)organiser dans la même journée": PLAY_ORGA_SAME_DAY,
-    "Jouer et (co-)organiser deux jours consécutifs":
-        PLAY_ORGA_TWO_CONSECUTIVE_DAYS
-}
-
-# Blacklists management
-# TODO: create a type alias for blacklist kinds, for example with an
-# enumeration?
-DONT_PLAY_WITH = 0
-DONT_ORGANIZE_FOR = 1
-DONT_BE_ORGANIZED_BY = 2
-
-BLACKLIST_KINDS = {
-    "Ne pas jouer avec": DONT_PLAY_WITH,
-    "Ne pas organiser pour": DONT_ORGANIZE_FOR,
-    "Ne pas être organisée par": DONT_BE_ORGANIZED_BY
-}
-
-
-class Player:
-    ACTIVE_PLAYERS = 0
-
-    def __init__(self, name: str,
-                 initial_activity_names: List[Activity],
-                 availabilities: Dict[TimeSlot, bool],
-                 max_activities: Optional[int],
-                 ideal_activities: Optional[int],
-                 constraints: Set[Constraint],
-                 blacklist_names: Dict[int, List[str]]):
-        # Auto number the players
-        # Note: not used anymore, could be deleted.
-        self.id = Player.ACTIVE_PLAYERS
-        Player.ACTIVE_PLAYERS += 1
-
-        self.name = name
-        self.wishes: List[Activity] = []
-        self.initial_activity_names = initial_activity_names
-        self.ranked_activity_names: List[str] = []
-        self.availability: Dict[TimeSlot, bool] = availabilities
-        self.max_activities = max_activities
-        self.ideal_activities = ideal_activities
-        assert ideal_activities <= max_activities, \
-               f"Player {name}: the number of ideal activities is larger " \
-               f"than the maximal number of activities."
-        self.constraints: Set[Constraint] = constraints
-        self.blacklist_names: List[str] = blacklist_names
-
-        # A ILP variable representing the number of activities of the player.
-        # It is bounded first by the ideal number of activities, then by the
-        # maximal number of activities.
-        self.nb_activites: Option[Var] = None
-
-        # Blacklists sets are empty, and will be replaced later by players.
-        self.blacklist: Dict[int, Set[Player]] = \
-                        {bl_kind:set() for bl_kind in BLACKLIST_KINDS.values()}
-        # Will be replaced later by activities.
-        self.organizing: List[Activity] = []
-
-    def populate_wishes(self, activities: List[Activity]) -> None:
-        """
-        Add a wish for any activity mentionned in the list of activity names.
-        As an activity can be organized several times, several wishes of the
-        same name may be added.
-        """
-        for act_name in self.initial_activity_names:
-            act = [act for act in activities if act.name == act_name.strip()]
-            if act == []:
-                warn(f"Could not find activity {act_name} in the activity list. "
-                      "Check your activity file.")
-            else:
-                self.wishes.extend(act)
-
-    def populate_blacklists(self, players: List[Player]) -> None:
-        for bl_kind, names in self.blacklist_names.items():
-            for name in names:
-                other = find_player_by_name(name, players)
-                self.blacklist[bl_kind].add(other)
-
-    def filter_availability(self, verbose:bool = False) -> None:
-        """Function called at the beginning to filter impossible wishes.
-
-        It filters out wishes where the player in unavailable, when it
-        overlaps with the organization of a game, or wishes the same day
-        as an orginazition (when the player asked not to participate
-        and organize the same day).
-
-        This procedure is called once after the initialization of players
-        and activities.
-        """
-        if PLAY_ORGA_SAME_DAY in self.constraints:
-            activity_when_orga = [a for a in self.wishes for o in self.organizing
-                                  if a.date() == o.date()]
-            if verbose and activity_when_orga:
-                print("Found wishes and activities the same day :")
-                for a in set(activity_when_orga):
-                    print(f"- {a}")
-
-            for a in set(activity_when_orga):
-                self.wishes.remove(a)
-
-        if PLAY_ORGA_TWO_CONSECUTIVE_DAYS in self.constraints:
-            activity_orga_consecutive = {a for a in self.wishes
-                                         for o in self.organizing
-                                         if abs(a.date() - o.date()).days <= 1}
-            if verbose and activity_orga_consecutive:
-                print("Found wishes and activities on consecutive days :")
-                for a in activity_orga_consecutive:
-                    print(f"- {a}")
-
-            for a in activity_orga_consecutive:
-                self.wishes.remove(a)
-
-        organizing = [a for a in self.wishes for o in self.organizing
-                       if a.overlaps(o.timeslot)]
-        if verbose and organizing:
-            print("Found wishes when organizing :")
-            for a in set(organizing):
-                print(f"- {a}")
-
-        for a in set(organizing):
-            self.wishes.remove(a)
-
-        conflicting = [a for a in self.wishes
-                       for (slot, available) in self.availability.items()
-                       if a.overlaps(slot) and not available]
-        if verbose and conflicting:
-            print("Found wishes where not available :")
-            for a in set(conflicting):
-                print(f"- {a}")
-        for a in set(conflicting):
-            self.wishes.remove(a)
-
-        # Blacklist constraint when the player does not want to play with an
-        # organizer.
-        blacklisted_wishes = []
-        for w in self.wishes:
-            blacklisted_orgas = set(self.blacklist[DONT_BE_ORGANIZED_BY])
-            blacklisted_orgas &= set(w.orgas)
-            if blacklisted_orgas:
-                if verbose:
-                    print(f'- Wish "{w}" removed because the game is organized '
-                          f'by blacklisted organizers: {blacklisted_orgas}')
-                blacklisted_wishes.append(w)
-        for w in set(blacklisted_wishes):
-            self.wishes.remove(w)
-
-        # Blacklist constraints when an organizer does not want to play with a
-        # player.
-        blacklisted_wishes = []
-        for w in self.wishes:
-            blacklisting_orgas = [orga for orga in w.orgas
-                                  if self in orga.blacklist[DONT_ORGANIZE_FOR]]
-            if blacklisting_orgas:
-                if verbose:
-                    print(f'- Wish "{w}" removed because the game is organized '
-                          f'by blacklisted organizers: {blacklisting_orgas}')
-                blacklisted_wishes.append(w)
-        for w in set(blacklisted_wishes):
-            self.wishes.remove(w)
-
-        # Clearing up activity names only to keep those where the player is
-        # available:
-        for w in self.wishes:
-            if self.ranked_activity_names == [] or \
-               self.ranked_activity_names[-1] != w.name:
-                self.ranked_activity_names.append(w.name)
-
-    def create_nb_activities_variable(self, model: Model) -> None:
-        self.nb_activities = model.add_var(var_type=INTEGER,
-                                           ub=self.ideal_activities)
-
-    def activity_coef(self, activity: str, decay: float) -> float:
-        return decay ** self.ranked_activity_names.index(activity.name)
-
-    def name_with_rank(self, name: str) -> str:
-        """Return the name of an activity along with its rank.
-        Contrary to the function "activity_coef", the rank is the rank of the
-        activity among the initial wishlist, not among the wishlist after
-        filtering out activities where the player is unavailable."""
-        rank = 1 + self.initial_activity_names.index(name)
-        return f"{name} (n°{rank})"
-
-    def __repr__(self):
-        return f"{self.id} | {self.name}"
-
-
-def find_player_by_name(name: str, players: List[Player]) -> Optional[Player]:
-    p = [pl for pl in players if pl.name == name]
-    if not p:
-        warn(f"Could not find player {name}")
-        return None
-    elif len(p) == 1:
-        return p[0]
-    else:
-        raise ValueError(f"Several players corresponding to the name {name}")
-
-# Extraction of data about availability
-def get_available_players(
-    players: List[Player],
-    slot: TimeSlot,
-    activity_name: Option[str]) -> List[Player]:
-    """Return the list of players available at a given time slot and an
-    activity. If activity_name is None, returns every players available at that
-    slot.
-
-    slot: Must be one of the slots in the availabiilty
-    """
-    available = []
-    for player in players:
-        if not player.availability[slot]:
-            # player is not available at this slot
-            continue
-        if activity_name is not None:
-            if activity_name not in player.initial_activity_names:
-                # player does not wish to play the activity
-                continue
-
-        available.append(player)
-
-    return available
-
-def print_dispos(players, activity_name: str, disp_available=False):
-    slots = players[0].availability.keys()
-    for slot in slots:
-        pl = get_available_players(players, slot, activity_name)
-        names = [p.name for p in pl]
-        print(f"{slot}\t{len(pl)}\t")
-        if disp_available:
-            print(end="\t")
-            print(*(p.name for p in pl), sep=", ")
-
+from base import Activity, Player, Constraint, BlacklistKind
 
 class Matcher:
     """TODO"""
@@ -323,15 +17,18 @@ class Matcher:
         self.activities = activities
         self.model = Model()
         self.vars: Dict[Tuple(Player, Activity), Var] = {}
+        self.nb_players: Dict[Activity, Var] = {}
+        self.nb_activities: Dict[Player, Var] = {}
         self.decay = decay
 
         for p in self.players:
-            p.create_nb_activities_variable(self.model)
+            x = self.model.add_var(var_type=INTEGER, ub=p.ideal_activities)
+            self.nb_activities[p] = x
             for a in p.wishes:
                 self.vars[p, a] = self.model.add_var(var_type=BINARY)
-
         for a in self.activities:
-            a.create_nb_players_variable(self.model)
+            x = self.model.add_var(var_type=INTEGER, ub=a.capacity)
+            self.nb_players[a] = x
 
         self.generate_model()
 
@@ -340,12 +37,12 @@ class Matcher:
         # nb_activities variables are the sum of activities
         for p in self.players:
             acts_with_p = [v for (q, _), v in self.vars.items() if p is q]
-            self.model += xsum(acts_with_p) == p.nb_activities
+            self.model += xsum(acts_with_p) == self.nb_activities[p]
 
         # nb_players variables are the sum of activities
         for a in self.activities:
             players_with_a = [v for (_, b), v in self.vars.items() if a is b]
-            self.model += xsum(players_with_a) == a.nb_players
+            self.model += xsum(players_with_a) == self.nb_players[a]
             
         # A player cannot play two sessions of the same game:
         for p in self.players:
@@ -366,7 +63,7 @@ class Matcher:
 
             one_day = timedelta(days=1)
 
-            if TWO_SAME_DAY in p.constraints:
+            if Constraint.TWO_SAME_DAY in p.constraints:
                 for acts_same_day in activities_by_days.values():
                     c = xsum(self.vars[p, a] for a in acts_same_day) <= 1
                     self.model += c
@@ -378,20 +75,20 @@ class Matcher:
                         if a.overlaps(b.timeslot):
                             self.model += self.vars[p, a] + self.vars[p, b] <= 1
 
-            if TWO_CONSECUTIVE_DAYS in p.constraints:
+            if Constraint.TWO_CONSECUTIVE_DAYS in p.constraints:
                 for day in days_played:
                     for a, b in product(activities_by_days[day],
                                         activities_by_days[day + one_day]):
                         self.model += self.vars[p, a] + self.vars[p, b] <= 1
 
-            if THREE_CONSECUTIVE_DAYS in p.constraints:
+            if Constraint.THREE_CONSECUTIVE_DAYS in p.constraints:
                 for day in days_played:
                     for acts in product(activities_by_days[day],
                                         activities_by_days[day + one_day],
                                         activities_by_days[day + 2 * one_day]):
                         self.model += xsum(self.vars[p, a] for a in acts) <= 2
 
-            if MORE_CONSECUTIVE_DAYS in p.constraints:
+            if Constraint.MORE_CONSECUTIVE_DAYS in p.constraints:
                 for day in days_played:
                     for acts in product(activities_by_days[day],
                                         activities_by_days[day + one_day],
@@ -399,7 +96,7 @@ class Matcher:
                                         activities_by_days[day + 3 * one_day]):
                         self.model += xsum(self.vars[p, a] for a in acts) <= 3
 
-            if NIGHT_THEN_MORNING in p.constraints:
+            if Constraint.NIGHT_THEN_MORNING in p.constraints:
                 for day in days_played:
                     for a, b in product(activities_by_days[day],
                                         activities_by_days[day + one_day]):
@@ -408,7 +105,7 @@ class Matcher:
             
         # Blacklist constraints:
         for p in self.players:
-            for q in p.blacklist[DONT_PLAY_WITH]:
+            for q in p.blacklist[BlacklistKind.DONT_PLAY_WITH]:
                 for a in self.activities:
                     if a in p.wishes and a in q.wishes:
                         self.model += self.vars[p, a] + self.vars[q, a] <= 1
@@ -431,6 +128,7 @@ class Matcher:
     def find_player(self, id: int) -> Player:
         return [p for p in self.players if p.id == id][0]
 
+    # TODO: duplicate of find_player_by_name, remove one of the two.
     def find_player_by_name(self, name: str) -> Player:
         pl = [p for p in self.players if p.name.lower() == name.lower()]
         if not pl:
@@ -474,7 +172,7 @@ class Matcher:
     def set_min_players_activity_by_name(
             self,
             activity_name: str,
-            min_number: Option[Int]=None
+            min_number: Optional[int]=None
         ) -> None:
         """Set the minimal number of players for an activity to a given
         number. If no number is provided, set the minimal number of players to
@@ -492,7 +190,7 @@ class Matcher:
 
         if min_number is None:
             min_number = act[0].capacity
-        act[0].nb_players.lb = min_number
+        self.nb_players[act[0]].lb = min_number
         print(f"Minimal number of players set to {min_number}")
 
     def solve(self, verbose=False) -> MatchResult:
@@ -514,9 +212,14 @@ class Matcher:
 
         # Then, we are going to increase the limits for the number of activity.
         for p in self.players:
-            p.nb_activities.ub = p.max_activities
+            self.nb_activities[p].ub = p.max_activities
 
-        self.model.optimize()
+        status = self.model.optimize()
+        if status != OptimizationStatus.OPTIMAL:
+            print(status)
+            raise RuntimeError("Error while solving the problem. Maybe the "
+                               "constraints where unsatisfiable?")
+
         res = MatchResult(self.players, self.activities)
         for (p, a), v in self.vars.items():
             if v.x >= 0.9:
@@ -538,7 +241,7 @@ class Matcher:
     def raise_player_nb_activities(self, name: str, nb: int) -> None:
         player = self.find_player_by_name(name)
         assert player.ideal_activities <= nb <= player.max_activities
-        player.nb_activities.ub = nb
+        self.nb_activities[player].ub = nb
 
 
 class MatchResult:

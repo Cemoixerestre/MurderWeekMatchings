@@ -4,10 +4,10 @@ from datetime import datetime
 
 import sys
 sys.path.append('src')
-from activityMatch import Matcher, get_available_players, print_dispos
-from loader import load_activities_and_players
-from timeslots import set_year, TimeSlot, generate_timeslot_from_column_name, \
-                      generate_timeslots_from_column_names
+from base import TimeSlot, get_available_players, print_dispos
+from matcher import Matcher
+from loader import set_year, load_activities_and_players, \
+        generate_timeslot_from_column_name, generate_timeslots_from_column_names
 
 def test_generate_timeslots_from_column_names():
     set_year(2024)

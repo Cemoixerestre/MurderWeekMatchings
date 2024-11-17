@@ -3,9 +3,80 @@ import pandas
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 from warnings import warn
+import re
 
-from activityMatch import Activity, Player, CONSTRAINT_NAMES, BLACKLIST_KINDS
-from timeslots import generate_timeslots_from_column_names
+from base import TimeSlot, Activity, Player, Constraint, BlacklistKind
+
+YEAR = "2024"
+
+def set_year(year):
+    global YEAR
+    YEAR = year
+
+SLOT_TIMES = {
+    'matin': ('08:00', '13:00'),
+    'après-midi': ('13:00', '18:00'),
+    'soir': ('18:00', '23:59')
+}
+NIGHT_SLOT_TIMES = ('00:00', '03:59')
+
+def generate_timeslot_from_column_name(column_name: str) -> Optional[TimeSlot]:
+    """
+    If column_name corresponds to a slot, returns the corresponding TimeSlot
+    object. Otherwise, returns None.
+
+    Examples:
+    - "Dimanche 25/08 après-midi" is mapped to the slot
+      (YYYY-08-25 13:00, YYYY-08-25 18:00)
+    - "Nuit de dimanche 25/08 à lundi 26/08" is mapped to the slot
+      (YYYY-08-26 00:00, YYYY-08-26 03:59)
+    - "Vœu n°3" is not a time slot. Returns None.
+    """
+    day_pattern = "(?P<day_name>\\S*) (?P<day>.{2})/(?P<month>.{2}) " \
+                  "(?P<slot>\\S*)"
+    night_pattern = "Nuit de \\S* .{2}/.{2} à " \
+                    "(?P<day_name>\\S*) (?P<day>.{2})/(?P<month>.{2})"
+    day_match = re.fullmatch(day_pattern, column_name)
+    night_match = re.fullmatch(night_pattern, column_name)
+    if day_match is not None:
+        day_name = day_match.group("day_name")
+        month = day_match.group("month")
+        day_nb = day_match.group("day")
+        slot_name = day_match.group("slot")
+        start, end = SLOT_TIMES[slot_name]
+    elif night_match is not None:
+        day_name = night_match.group("day_name")
+        month = night_match.group("month")
+        day_nb = night_match.group("day")
+        start, end = NIGHT_SLOT_TIMES
+    else:
+        return None
+
+    start_date = datetime.fromisoformat(f"{YEAR}-{month}-{day_nb} {start}")
+    end_date = datetime.fromisoformat(f"{YEAR}-{month}-{day_nb} {end}")
+    slot = TimeSlot(start_date, end_date, column_name)
+    assert slot.day_name.lower() == day_name.lower()
+    return slot
+
+def generate_timeslots_from_column_names(column_names: List[str]) -> Dict[str, TimeSlot]:
+    """
+    Take the list of all columns. To each of them that correspond to slot name in
+    natural language, map them to a TimeSlot object.
+
+    Examples:
+    - "Dimanche 25/08 après-midi" is mapped to the slot
+      (YYYY-08-25 13:00, YYYY-08-25 18:00)
+    - "Nuit de dimanche 25/08 à lundi 26/08" is mapped to the slot
+      (YYYY-08-26 00:00, YYYY-08-26 03:59)
+    - "Vœu n°3" is not a time slot. It's therefore not a key in the result.
+    """
+    res = dict()
+    for col in column_names:
+        slot = generate_timeslot_from_column_name(col)
+        if slot is not None:
+            res[col] = slot
+
+    return res
 
 def load_activities(act_path: Path, verbose=True) -> List[Activity]:
     activities_df = pandas.read_csv(act_path, delimiter=',', quotechar='"', keep_default_na=False)
@@ -20,6 +91,24 @@ def load_activities(act_path: Path, verbose=True) -> List[Activity]:
         activities.append(a)
 
     return activities
+
+BLACKLIST_KINDS: Dict[str, BlacklistKind] = {
+    "Ne pas jouer avec": BlacklistKind.DONT_PLAY_WITH,
+    "Ne pas organiser pour": BlacklistKind.DONT_ORGANIZE_FOR,
+    "Ne pas être organisée par": BlacklistKind.DONT_BE_ORGANIZED_BY
+}
+
+CONSTRAINT_NAMES: Dict[str, Constraint] = {
+    "Jouer deux jeux dans la même journée": Constraint.TWO_SAME_DAY,
+    "Jouer un soir et le lendemain matin": Constraint.NIGHT_THEN_MORNING,
+    "Jouer deux jours consécutifs": Constraint.TWO_CONSECUTIVE_DAYS,
+    "Jouer trois jours consécutifs": Constraint.THREE_CONSECUTIVE_DAYS,
+    "Jouer plus de trois jours consécutifs": Constraint.MORE_CONSECUTIVE_DAYS,
+    "Jouer et (co-)organiser dans la même journée":
+        Constraint.PLAY_ORGA_SAME_DAY,
+    "Jouer et (co-)organiser deux jours consécutifs":
+        Constraint.PLAY_ORGA_TWO_CONSECUTIVE_DAYS
+}
 
 def load_players(players_path: Path, verbose=True) -> List[Player]:
     players_df = pandas.read_csv(players_path, delimiter=',', quotechar='"')
@@ -43,7 +132,8 @@ def load_players(players_path: Path, verbose=True) -> List[Player]:
         ideal_games = int(p['ideal_games']) if not pandas.isna(p['ideal_games']) else max_games
         # Map each slot to a boolean: true if the player is available, false otherwise.
         availability = {slot:not pandas.isna(p[col]) for (col, slot) in time_slots.items()}
-        constraints = set(cons for (col, cons) in CONSTRAINT_NAMES.items() if pandas.isna(p[col]))
+        constraints = set(cons for (col, cons) in CONSTRAINT_NAMES.items() 
+                          if pandas.isna(p[col]))
         
         # Blacklists information:
         blacklist_names: Dict[int, List[str]] = {}

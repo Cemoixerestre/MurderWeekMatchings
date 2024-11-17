@@ -42,13 +42,6 @@ class Activity:
     def __repr__(self):
         return f"{self.id} | {self.name} | " \
                f"{self.timeslot}"
-               #f"{len(self.players)} / {self.capacity} players | " 
-
-    def is_full(self) -> bool:
-        return len(self.players) >= self.capacity
-
-    def add_player(self, player: Player) -> None:
-        self.players.append(player)
 
     def populate_organizers(self, players: List[Player]) -> None:
         for name in self.orga_names:
@@ -83,7 +76,6 @@ MORE_CONSECUTIVE_DAYS = 4
 PLAY_ORGA_SAME_DAY = 5
 PLAY_ORGA_TWO_CONSECUTIVE_DAYS = 6
 
-# TODO: treat "play and organize the same day" like other constraints.
 CONSTRAINT_NAMES = {
     "Jouer deux jeux dans la même journée": TWO_SAME_DAY,
     "Jouer un soir et le lendemain matin": NIGHT_THEN_MORNING,
@@ -107,6 +99,7 @@ BLACKLIST_KINDS = {
     "Ne pas organiser pour": DONT_ORGANIZE_FOR,
     "Ne pas être organisée par": DONT_BE_ORGANIZED_BY
 }
+
 
 class Player:
     ACTIVE_PLAYERS = 0
@@ -546,6 +539,7 @@ class Matcher:
         player = self.find_player_by_name(name)
         assert player.ideal_activities <= nb <= player.max_activities
         player.nb_activities.ub = nb
+
 
 class MatchResult:
     def __init__(self, players: List[Player], activities: List[Activity]):

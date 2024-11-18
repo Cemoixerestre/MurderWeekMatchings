@@ -5,7 +5,7 @@ from datetime import datetime
 from warnings import warn
 import re
 
-from base import TimeSlot, Activity, Player, Constraint, BlacklistKind
+from base import TimeSlot, Activity, Player, Constraints, BlacklistKind
 
 YEAR = "2024"
 
@@ -98,16 +98,16 @@ BLACKLIST_KINDS: Dict[str, BlacklistKind] = {
     "Ne pas être organisée par": BlacklistKind.DONT_BE_ORGANIZED_BY
 }
 
-CONSTRAINT_NAMES: Dict[str, Constraint] = {
-    "Jouer deux jeux dans la même journée": Constraint.TWO_SAME_DAY,
-    "Jouer un soir et le lendemain matin": Constraint.NIGHT_THEN_MORNING,
-    "Jouer deux jours consécutifs": Constraint.TWO_CONSECUTIVE_DAYS,
-    "Jouer trois jours consécutifs": Constraint.THREE_CONSECUTIVE_DAYS,
-    "Jouer plus de trois jours consécutifs": Constraint.MORE_CONSECUTIVE_DAYS,
+CONSTRAINT_NAMES: Dict[str, Constraints] = {
+    "Jouer deux jeux dans la même journée": Constraints.TWO_SAME_DAY,
+    "Jouer un soir et le lendemain matin": Constraints.NIGHT_THEN_MORNING,
+    "Jouer deux jours consécutifs": Constraints.TWO_CONSECUTIVE_DAYS,
+    "Jouer trois jours consécutifs": Constraints.THREE_CONSECUTIVE_DAYS,
+    "Jouer plus de trois jours consécutifs": Constraints.MORE_CONSECUTIVE_DAYS,
     "Jouer et (co-)organiser dans la même journée":
-        Constraint.PLAY_ORGA_SAME_DAY,
+        Constraints.PLAY_ORGA_SAME_DAY,
     "Jouer et (co-)organiser deux jours consécutifs":
-        Constraint.PLAY_ORGA_TWO_CONSECUTIVE_DAYS
+        Constraints.PLAY_ORGA_TWO_CONSECUTIVE_DAYS
 }
 
 def load_players(players_path: Path, verbose=True) -> List[Player]:
@@ -132,11 +132,15 @@ def load_players(players_path: Path, verbose=True) -> List[Player]:
         ideal_games = int(p['ideal_games']) if not pandas.isna(p['ideal_games']) else max_games
         # Map each slot to a boolean: true if the player is available, false otherwise.
         availability = {slot:not pandas.isna(p[col]) for (col, slot) in time_slots.items()}
-        constraints = set(cons for (col, cons) in CONSTRAINT_NAMES.items() 
-                          if pandas.isna(p[col]))
+
+        # Constraints generation
+        constraints = Constraints.NO_CONSTRAINT
+        for col, constr in CONSTRAINT_NAMES.items():
+            if pandas.isna(p[col]):
+                constraints |= constr
         
         # Blacklists information:
-        blacklist_names: Dict[int, List[str]] = {}
+        blacklist_names: Dict[BlacklistKind, List[str]] = {}
         for col_name, bl_kind in BLACKLIST_KINDS.items():
             names = str(p[col_name]).strip().split(';')
             names = [name for name in names if name != '' and name != 'nan']

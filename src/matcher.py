@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import timedelta
 from mip import Model, Var, OptimizationStatus, maximize, xsum, BINARY, INTEGER
 
-from base import Activity, Player, Constraint, BlacklistKind
+from base import Activity, Player, Constraints, BlacklistKind
 from match_result import MatchResult
 
 class Matcher:
@@ -64,7 +64,7 @@ class Matcher:
 
             one_day = timedelta(days=1)
 
-            if Constraint.TWO_SAME_DAY in p.constraints:
+            if Constraints.TWO_SAME_DAY in p.constraints:
                 for acts_same_day in activities_by_days.values():
                     c = xsum(self.vars[p, a] for a in acts_same_day) <= 1
                     self.model += c
@@ -76,20 +76,20 @@ class Matcher:
                         if a.overlaps(b.timeslot):
                             self.model += self.vars[p, a] + self.vars[p, b] <= 1
 
-            if Constraint.TWO_CONSECUTIVE_DAYS in p.constraints:
+            if Constraints.TWO_CONSECUTIVE_DAYS in p.constraints:
                 for day in days_played:
                     for a, b in product(activities_by_days[day],
                                         activities_by_days[day + one_day]):
                         self.model += self.vars[p, a] + self.vars[p, b] <= 1
 
-            if Constraint.THREE_CONSECUTIVE_DAYS in p.constraints:
+            if Constraints.THREE_CONSECUTIVE_DAYS in p.constraints:
                 for day in days_played:
                     for acts in product(activities_by_days[day],
                                         activities_by_days[day + one_day],
                                         activities_by_days[day + 2 * one_day]):
                         self.model += xsum(self.vars[p, a] for a in acts) <= 2
 
-            if Constraint.MORE_CONSECUTIVE_DAYS in p.constraints:
+            if Constraints.MORE_CONSECUTIVE_DAYS in p.constraints:
                 for day in days_played:
                     for acts in product(activities_by_days[day],
                                         activities_by_days[day + one_day],
@@ -97,7 +97,7 @@ class Matcher:
                                         activities_by_days[day + 3 * one_day]):
                         self.model += xsum(self.vars[p, a] for a in acts) <= 3
 
-            if Constraint.NIGHT_THEN_MORNING in p.constraints:
+            if Constraints.NIGHT_THEN_MORNING in p.constraints:
                 for day in days_played:
                     for a, b in product(activities_by_days[day],
                                         activities_by_days[day + one_day]):

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import List, Dict, Optional, Tuple, Set
 from datetime import datetime, timedelta
 from warnings import warn
-from enum import Enum
+from enum import Enum, Flag, auto
 
 WEEK_DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
 
@@ -118,19 +118,20 @@ class Activity:
         return other.timeslot.start - self.timeslot.end <= timedelta(hours=12)
 
 
-class Constraint(Enum):
-    TWO_SAME_DAY = 0
-    NIGHT_THEN_MORNING = 1
-    TWO_CONSECUTIVE_DAYS = 2
-    THREE_CONSECUTIVE_DAYS = 3
-    MORE_CONSECUTIVE_DAYS = 4
-    PLAY_ORGA_SAME_DAY = 5
-    PLAY_ORGA_TWO_CONSECUTIVE_DAYS = 6
+class Constraints(Flag):
+    NO_CONSTRAINT = 0
+    TWO_SAME_DAY = auto()
+    NIGHT_THEN_MORNING = auto()
+    TWO_CONSECUTIVE_DAYS = auto()
+    THREE_CONSECUTIVE_DAYS = auto()
+    MORE_CONSECUTIVE_DAYS = auto()
+    PLAY_ORGA_SAME_DAY = auto()
+    PLAY_ORGA_TWO_CONSECUTIVE_DAYS = auto()
 
 class BlacklistKind(Enum):
-    DONT_PLAY_WITH = 0
-    DONT_ORGANIZE_FOR = 1
-    DONT_BE_ORGANIZED_BY = 2
+    DONT_PLAY_WITH = auto()
+    DONT_ORGANIZE_FOR = auto()
+    DONT_BE_ORGANIZED_BY = auto()
 
 
 class Player:
@@ -141,10 +142,10 @@ class Player:
                  availabilities: Dict[TimeSlot, bool],
                  max_activities: Optional[int],
                  ideal_activities: Optional[int],
-                 constraints: Set[Constraint],
-                 blacklist_names: Dict[int, List[str]]):
+                 constraints: Constraints,
+                 blacklist_names: Dict[BlacklistKind, List[str]]):
         # Auto number the players
-        # Note: not used anymore, could be deleted.
+        # Note: not used anymore, could be deleted.
         self.id = Player.ACTIVE_PLAYERS
         Player.ACTIVE_PLAYERS += 1
 
@@ -158,11 +159,11 @@ class Player:
         assert ideal_activities <= max_activities, \
                f"Player {name}: the number of ideal activities is larger " \
                f"than the maximal number of activities."
-        self.constraints: Set[Constraint] = constraints
+        self.constraints: Constraints = constraints
         self.blacklist_names: List[str] = blacklist_names
 
         # Blacklists sets are empty, and will be replaced later by players.
-        self.blacklist: Dict[int, Set[Player]] = \
+        self.blacklist: Dict[BlacklistKind, Set[Player]] = \
                         {bl_kind:set() for bl_kind in BlacklistKind}
         # Will be replaced later by activities.
         self.organizing: List[Activity] = []
@@ -198,7 +199,7 @@ class Player:
         This procedure is called once after the initialization of players
         and activities.
         """
-        if Constraint.PLAY_ORGA_SAME_DAY in self.constraints:
+        if Constraints.PLAY_ORGA_SAME_DAY in self.constraints:
             activity_when_orga = [a for a in self.wishes for o in self.organizing
                                   if a.date() == o.date()]
             if verbose and activity_when_orga:
@@ -209,7 +210,7 @@ class Player:
             for a in set(activity_when_orga):
                 self.wishes.remove(a)
 
-        if Constraint.PLAY_ORGA_TWO_CONSECUTIVE_DAYS in self.constraints:
+        if Constraints.PLAY_ORGA_TWO_CONSECUTIVE_DAYS in self.constraints:
             activity_orga_consecutive = {a for a in self.wishes
                                          for o in self.organizing
                                          if abs(a.date() - o.date()).days <= 1}

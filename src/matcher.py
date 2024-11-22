@@ -226,19 +226,8 @@ class Matcher:
             if v.x >= 0.9:
                 res.add(p, a)
         return res
-    
-    def add_players(self, act_id: int, players: str) -> None:
-        activity = self.find_activity(act_id)
-        for name in players.split('\n'):
-            if name == '':
-                continue
-            player = self.find_player_by_name(name)
-            if (player, activity) not in self.vars:
-                warn(f"{name} is not playing {activity}")
-                continue
-            self.vars[player, activity].lb = 1
-        print("Players successfully added")
-    
+ 
+    # TODO: dead code
     def raise_player_nb_activities(self, name: str, nb: int) -> None:
         player = self.find_player_by_name(name)
         assert player.ideal_activities <= nb <= player.max_activities

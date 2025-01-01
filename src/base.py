@@ -277,7 +277,9 @@ class Player:
                self.ranked_activity_names[-1] != w.name:
                 self.ranked_activity_names.append(w.name)
 
-    def activity_coef(self, activity: str, decay: float) -> float:
+    def activity_coef(self, activity: Activity, decay: float) -> float:
+        if decay == "hyperbolic":
+            return 1 / (0.4 + self.ranked_activity_names.index(activity.name))
         return decay ** self.ranked_activity_names.index(activity.name)
 
     def name_with_rank(self, name: str) -> str:

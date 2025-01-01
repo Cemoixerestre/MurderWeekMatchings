@@ -194,7 +194,8 @@ class Matcher:
         self.nb_players[act[0]].lb = min_number
         print(f"Minimal number of players set to {min_number}")
 
-    def solve(self, verbose=False) -> MatchResult:
+    def solve(self, result_name: Option[str]=None, verbose=False) \
+    -> MatchResult:
         # Finding a solution where every player plays at most the *ideal* number
         # of games.
         status = self.model.optimize()
@@ -221,7 +222,7 @@ class Matcher:
             raise RuntimeError("Error while solving the problem. Maybe the "
                                "constraints where unsatisfiable?")
 
-        res = MatchResult(self.players, self.activities)
+        res = MatchResult(self.players, self.activities, result_name)
         for (p, a), v in self.vars.items():
             if v.x >= 0.9:
                 res.add(p, a)

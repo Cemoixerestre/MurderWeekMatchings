@@ -6,7 +6,13 @@ import csv
 from base import Player, Activity
 
 class MatchResult:
-    def __init__(self, players: List[Player], activities: List[Activity]):
+    def __init__(self, players: List[Player], activities: List[Activity],
+                 result_name: Option[str]=None):
+        if result_name == None:
+            self.result_name = "(sans nom)"
+        else:
+            self.result_name = result_name
+
         # List of players for each activity
         self.players: Dict[Activity, List[Player]] = \
             {a:[] for a in activities}
@@ -243,14 +249,22 @@ class MatchResult:
 
     def compare(self, other: MatchResult):
         """Affiche les différences entre deux castings"""
+        print("Comparaisons des plannings :")
+        print(f"+ {self.result_name}")
+        print(f"- {other.result_name}")
         for a, ps in self.players.items():
             diff_plus = set(ps) - set(other.players[a])
             diff_minus = set(other.players[a]) - set(ps)
             if len(diff_plus) == 0 and len(diff_minus) == 0:
                 continue
             print(a)
+            # Note : le rang affiché est celui après avoir retiré les activités
+            # où p est indisponible.
+            # TODO: documenter, ou retirer.
             for p in diff_plus:
-                print(f"+ {p}")
+                rank = 1 + p.ranked_activity_names.index(a.name)
+                print(f"+ {p} (n°{rank})")
             for p in diff_minus:
-                print(f"- {p}")
+                rank = 1 + p.ranked_activity_names.index(a.name)
+                print(f"- {p} (n°{rank})")
             print()

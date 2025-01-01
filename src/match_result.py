@@ -56,11 +56,6 @@ class MatchResult:
 
     def print_players_status(self) -> None:
         print("Activities given to each player:")
-        less = 0 # number of players with less activities than ideal
-        ideal = 0 # number of players with the ideal number of activities
-        more = 0 # number of players with more activities than ideal
-        no_best_choice = [] # players who did not obtain their best choice
-        top_3_choice = 0 # number of top 3 choices cumulated
         for (p, act) in self.activities.items():
             print(f"* {p.name} | Got {len(act)} activities. "
                   f"Ideal {p.ideal_activities}. Max {p.max_activities}.")
@@ -73,6 +68,18 @@ class MatchResult:
                 for a in p.organizing:
                     print(f"    - {a.name} | {a.timeslot}")
 
+        self.print_stats()
+
+    def print_stats(self) -> None:
+        print("Activities without a full cast\t"
+              f"{len([x for x in self.remaining_slots.values() if x > 0])}")
+        print("Activities given to each player:")
+        less = 0 # number of players with less activities than ideal
+        ideal = 0 # number of players with the ideal number of activities
+        more = 0 # number of players with more activities than ideal
+        no_best_choice = [] # players who did not obtain their best choice
+        top_3_choice = 0 # number of top 3 choices cumulated
+        for (p, act) in self.activities.items():
             # Collecting statistics
             if len(act) < p.ideal_activities:
                 less += 1
@@ -81,6 +88,8 @@ class MatchResult:
             else:
                 more += 1
             activity_names = [a.name for a in act]
+            # Pour les besoins des stats, devrait compter différemment
+            # l'activité n°1.
             if p.initial_activity_names != [] and p.initial_activity_names[0] not in activity_names:
                 no_best_choice.append(p)
             for name in p.initial_activity_names[:3]:
@@ -93,10 +102,9 @@ class MatchResult:
               f"{ideal} (= {100 * ideal / self.nb_players:.1f}%)")
         print( "Players with more activities than ideal:\t"
               f"{more} (= {100 * more / self.nb_players:.1f}%)")
-        print()
-        print( "Players who did not obtain their best choice: "
-              f"{' '.join(map(repr, no_best_choice))}")
-        print(f"Nb of top 3 choices: {top_3_choice}")
+        print( "Players who did not obtain their best choice:\t"
+              f"{len(no_best_choice)}")
+        print(f"Nb of top 3 choices:\t{top_3_choice}")
 
     def export_activities_to_csv(self, filename: str) -> None:
         activities = sorted(self.players.keys(), key=lambda a: a.timeslot.start)

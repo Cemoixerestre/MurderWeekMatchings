@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import List, Dict, Tuple, Optional
+from collections.abc import Callable
 from itertools import combinations, product
 from collections import defaultdict
 from datetime import timedelta
@@ -9,10 +10,17 @@ from mip import Model, Var, OptimizationStatus, maximize, xsum, BINARY, INTEGER
 from base import Activity, Player, Constraints, BlacklistKind
 from match_result import MatchResult
 
+def exponential_coef(decay: float) -> Callable([int], float):
+    def coef(i): return decay ** i
+    return coef
+
+def hyperbolic_coef(i : int) -> float:
+    return 1 / (i + 0.4)
+
 class Matcher:
     """TODO"""
     def __init__(self, players: List[Player], activities: List[Activity],
-                 decay=0.5):
+                 coef: Callable([int], float)):
         self.players = players
         self.players.sort(key=lambda p: p.name)
         self.activities = activities
@@ -20,7 +28,7 @@ class Matcher:
         self.vars: Dict[Tuple(Player, Activity), Var] = {}
         self.nb_players: Dict[Activity, Var] = {}
         self.nb_activities: Dict[Player, Var] = {}
-        self.decay = decay
+        self.coef = coef
 
         for p in self.players:
             x = self.model.add_var(var_type=INTEGER, ub=p.ideal_activities)
@@ -44,7 +52,7 @@ class Matcher:
         for a in self.activities:
             players_with_a = [v for (_, b), v in self.vars.items() if a is b]
             self.model += xsum(players_with_a) == self.nb_players[a]
-            
+           
         # A player cannot play two sessions of the same game:
         for p in self.players:
             wishes_by_name = defaultdict(list)
@@ -103,7 +111,7 @@ class Matcher:
                                         activities_by_days[day + one_day]):
                         if a.night_then_morning(b):
                             self.model += self.vars[p, a] + self.vars[p, b] <= 1
-            
+           
         # Blacklist constraints:
         for p in self.players:
             for q in p.blacklist[BlacklistKind.DONT_PLAY_WITH]:
@@ -112,7 +120,7 @@ class Matcher:
                         self.model += self.vars[p, a] + self.vars[q, a] <= 1
 
         # Finally, the function to optimize:
-        obj = maximize(xsum(p.activity_coef(a, self.decay) * v
+        obj = maximize(xsum(self.coef(p.ranked_activity_names.index(a.name)) * v
                             for (p, a), v in self.vars.items()))
         self.model.objective = obj
 
@@ -140,7 +148,7 @@ class Matcher:
             self,
             player_name: str,
             activity_name: str
-        ) -> None:        
+        ) -> None:       
         """Force the assignement of a player to an activity. This method must
         be called *before* the methode `solve`, otherwise it is useless. May
         fail if several activities correspond to the name."""
@@ -159,8 +167,8 @@ class Matcher:
         self.model += xsum(self.vars[player, a] for a in act) >= 1
 
     def force_assign_activity_by_id(
-            self, 
-            player_name: str, 
+            self,
+            player_name: str,
             activity_id: int
         ) -> None:
         """force the assignement of a player to an activity. This method must
@@ -227,7 +235,7 @@ class Matcher:
             if v.x >= 0.9:
                 res.add(p, a)
         return res
- 
+
     # TODO: dead code
     def raise_player_nb_activities(self, name: str, nb: int) -> None:
         player = self.find_player_by_name(name)

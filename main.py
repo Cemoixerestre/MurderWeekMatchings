@@ -6,7 +6,7 @@ import random
 import sys
 sys.path.append("src")
 from base import print_dispos
-from matcher import Matcher, exponential_coef
+from matcher import Matcher
 from loader import set_year, load_activities_and_players
 
 # À modifiez pour mettre l'année courante.
@@ -26,7 +26,7 @@ activities, players = load_activities_and_players(
 # créneaux où plusieurs personnes sont disponibles pour un jeu:
 print_dispos(players, "César et le Village des Irréductibles", True)
 
-matcher = Matcher(players, activities, exponential_coef(0.6))
+matcher = Matcher(players, activities)
 print("")
 # On affecte de force des joueureuses à des activités.
 # Le principal exemple d'utilisation est le suivant : lorsqu'un jeu est
@@ -43,8 +43,9 @@ res.print_activities_status()
 #res.export_activities_to_csv("out/output-activites.csv")
 #res.export_players_to_csv("out/output-players.csv")
 
-# Comparaison entre deux solutions différentes.
-matcher = Matcher(players, activities, exponential_coef(0.5))
-other = matcher.solve()
-res.compare(other)
+### Comparaison entre deux solutions différentes.
+##from matcher import exponential_coef
+##matcher = Matcher(players, activities, exponential_coef(0.5))
+##other = matcher.solve()
+##res.compare(other)
 

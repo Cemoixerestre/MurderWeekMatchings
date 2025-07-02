@@ -42,7 +42,7 @@ def test_night_then_morning():
             Path('test/test-input/night-then-morning-activities.csv'),
             Path('test/test-input/night-then-morning-inscriptions.csv'))
 
-    matcher = Matcher(players, activities, exponential_coef(0.6))
+    matcher = Matcher(players, activities)
 
     res = matcher.solve(verbose=True)
     res.print_players_status()
@@ -90,7 +90,7 @@ def test_blacklist():
             Path('test/test-input/blacklist-activities.csv'),
             Path('test/test-input/blacklist-inscriptions.csv'))
 
-    matcher = Matcher(players, activities, exponential_coef(0.6))
+    matcher = Matcher(players, activities)
 
     res = matcher.solve(verbose=True)
     res.print_players_status()
@@ -122,7 +122,7 @@ def test_orga_player_consecutive_days():
             Path('test/test-input/play-orga-consecutive-days-activities.csv'),
             Path('test/test-input/play-orga-consecutive-days-inscriptions.csv'))
 
-    matcher = Matcher(players, activities, exponential_coef(0.6))
+    matcher = Matcher(players, activities)
 
     res = matcher.solve(verbose=True)
     res.print_players_status()
@@ -141,7 +141,7 @@ def test_orga_player_same_day():
             Path('test/test-input/play-orga-same-day-activities.csv'),
             Path('test/test-input/play-orga-same-day-inscriptions.csv'))
 
-    matcher = Matcher(players, activities, exponential_coef(0.6))
+    matcher = Matcher(players, activities)
 
     res = matcher.solve(verbose=True)
     res.print_players_status()

@@ -15,12 +15,12 @@ def exponential_coef(decay: float) -> Callable([int], float):
     return coef
 
 def hyperbolic_coef(i : int) -> float:
-    return 1 / (i + 0.4)
+    return 1 / (i + 1.01)
 
 class Matcher:
     """TODO"""
     def __init__(self, players: List[Player], activities: List[Activity],
-                 coef: Callable([int], float)):
+                 coef: Callable([int], float)=hyperbolic_coef):
         self.players = players
         self.players.sort(key=lambda p: p.name)
         self.activities = activities

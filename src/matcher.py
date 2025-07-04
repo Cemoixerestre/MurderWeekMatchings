@@ -17,6 +17,8 @@ def exponential_coef(decay: float) -> Callable([int], float):
 def hyperbolic_coef(i : int) -> float:
     return 1 / (i + 1.01)
 
+EPSILON = 1 / 64
+
 class Matcher:
     """TODO"""
     def __init__(self, players: List[Player], activities: List[Activity],
@@ -25,33 +27,41 @@ class Matcher:
         self.players.sort(key=lambda p: p.name)
         self.activities = activities
         self.model = Model()
-        self.vars: Dict[Tuple(Player, Activity), Var] = {}
-        self.nb_players: Dict[Activity, Var] = {}
-        self.nb_activities: Dict[Player, Var] = {}
+        # self.vars[p, a]: 1 iff the player p plays the activity a
+        self.plays: Dict[Tuple(Player, Activity), Var] = {}
+        # Let's assume that the player p wants an ideal number "i" activities
+        # and a maximal number "m" of activities, with i <= m. We're going to
+        # give a higher weight for only i activities and a lower weight
+        # for the other activities.
+        # This variable is 1 if p plays an activity a that's among the first i
+        # activities.
+        self.ideal_plays: Dict[Tuple(Player, Activity), Var] = {}
         self.coef = coef
 
         for p in self.players:
-            x = self.model.add_var(var_type=INTEGER, ub=p.ideal_activities)
-            self.nb_activities[p] = x
             for a in p.wishes:
-                self.vars[p, a] = self.model.add_var(var_type=BINARY)
-        for a in self.activities:
-            x = self.model.add_var(var_type=INTEGER, ub=a.capacity)
-            self.nb_players[a] = x
+                self.plays[p, a] = self.model.add_var(var_type=BINARY)
+                self.ideal_plays[p, a] = self.model.add_var(var_type=BINARY)
 
         self.generate_model()
 
     def generate_model(self) -> None:
         """Fill the model with the constraints."""
+        # An activity a played in the "ideal number of activities" is an activity played.
+        for p, a in self.plays.keys():
+            self.model += self.ideal_plays[p, a] <= self.plays[p, a]
+
         # nb_activities variables are the sum of activities
         for p in self.players:
-            acts_with_p = [v for (q, _), v in self.vars.items() if p is q]
-            self.model += xsum(acts_with_p) == self.nb_activities[p]
+            acts_with_p = [v for (q, _), v in self.plays.items() if p is q]
+            ideal_acts_with_p = [v for (q, _), v in self.ideal_plays.items() if p is q]
+            self.model += xsum(acts_with_p) <= p.max_activities
+            self.model += xsum(ideal_acts_with_p) <= p.ideal_activities
 
-        # nb_players variables are the sum of activities
+        # The number of players is limited by the capacity
         for a in self.activities:
-            players_with_a = [v for (_, b), v in self.vars.items() if a is b]
-            self.model += xsum(players_with_a) == self.nb_players[a]
+            players_with_a = [v for (_, b), v in self.plays.items() if a is b]
+            self.model += xsum(players_with_a) <= a.capacity
            
         # A player cannot play two sessions of the same game:
         for p in self.players:
@@ -60,7 +70,7 @@ class Matcher:
                 wishes_by_name[w.name].append(w)
             for wishes_same_name in wishes_by_name.values():
                 if len(wishes_same_name) >= 2:
-                    c = xsum(self.vars[p, a] for a in wishes_same_name) <= 1
+                    c = xsum(self.plays[p, a] for a in wishes_same_name) <= 1
                     self.model += c
 
         # Time constaints:
@@ -74,7 +84,7 @@ class Matcher:
 
             if Constraints.TWO_SAME_DAY in p.constraints:
                 for acts_same_day in activities_by_days.values():
-                    c = xsum(self.vars[p, a] for a in acts_same_day) <= 1
+                    c = xsum(self.plays[p, a] for a in acts_same_day) <= 1
                     self.model += c
             else:
                 # In any cases, a player cannot play two activities at the
@@ -82,20 +92,20 @@ class Matcher:
                 for acts_same_day in activities_by_days.values():
                     for a, b in combinations(acts_same_day, 2):
                         if a.overlaps(b.timeslot):
-                            self.model += self.vars[p, a] + self.vars[p, b] <= 1
+                            self.model += self.plays[p, a] + self.plays[p, b] <= 1
 
             if Constraints.TWO_CONSECUTIVE_DAYS in p.constraints:
                 for day in days_played:
                     for a, b in product(activities_by_days[day],
                                         activities_by_days[day + one_day]):
-                        self.model += self.vars[p, a] + self.vars[p, b] <= 1
+                        self.model += self.plays[p, a] + self.plays[p, b] <= 1
 
             if Constraints.THREE_CONSECUTIVE_DAYS in p.constraints:
                 for day in days_played:
                     for acts in product(activities_by_days[day],
                                         activities_by_days[day + one_day],
                                         activities_by_days[day + 2 * one_day]):
-                        self.model += xsum(self.vars[p, a] for a in acts) <= 2
+                        self.model += xsum(self.plays[p, a] for a in acts) <= 2
 
             if Constraints.MORE_CONSECUTIVE_DAYS in p.constraints:
                 for day in days_played:
@@ -103,26 +113,31 @@ class Matcher:
                                         activities_by_days[day + one_day],
                                         activities_by_days[day + 2 * one_day],
                                         activities_by_days[day + 3 * one_day]):
-                        self.model += xsum(self.vars[p, a] for a in acts) <= 3
+                        self.model += xsum(self.plays[p, a] for a in acts) <= 3
 
             if Constraints.NIGHT_THEN_MORNING in p.constraints:
                 for day in days_played:
                     for a, b in product(activities_by_days[day],
                                         activities_by_days[day + one_day]):
                         if a.night_then_morning(b):
-                            self.model += self.vars[p, a] + self.vars[p, b] <= 1
+                            self.model += self.plays[p, a] + self.plays[p, b] <= 1
            
         # Blacklist constraints:
         for p in self.players:
             for q in p.blacklist[BlacklistKind.DONT_PLAY_WITH]:
                 for a in self.activities:
                     if a in p.wishes and a in q.wishes:
-                        self.model += self.vars[p, a] + self.vars[q, a] <= 1
+                        self.model += self.plays[p, a] + self.plays[q, a] <= 1
 
         # Finally, the function to optimize:
-        obj = maximize(xsum(self.coef(p.ranked_activity_names.index(a.name)) * v
-                            for (p, a), v in self.vars.items()))
-        self.model.objective = obj
+        obj: List[Tuple[float, Var]] = []
+        for p, a in self.plays.keys():
+            coef = self.coef(p.ranked_activity_names.index(a.name))
+            obj.append((coef, self.ideal_plays[p, a]))
+            obj.append((EPSILON * coef, self.plays[p, a]))
+
+        self.model.objective = maximize(sum(c * v for (c, v) in obj))
+                            
 
     def find_activity(self, id: int) -> Activity:
         """Find an activity using an ID"""
@@ -164,7 +179,7 @@ class Matcher:
                   f"{player_name} to a particular activity, you should use the "
                    "method `force_assign_activity_by_id`.")
 
-        self.model += xsum(self.vars[player, a] for a in act) >= 1
+        self.model += xsum(self.plays[player, a] for a in act) >= 1
 
     def force_assign_activity_by_id(
             self,
@@ -176,7 +191,7 @@ class Matcher:
         assignation is not visible."""
         player = self.find_player_by_name(player_name)
         activity = self.find_activity(activity_id)
-        self.vars[player, activity].lb = 1
+        self.plays[player, activity].lb = 1
 
     def set_min_players_activity_by_name(
             self,
@@ -204,26 +219,6 @@ class Matcher:
 
     def solve(self, result_name: Option[str]=None, verbose=False) \
     -> MatchResult:
-        # Finding a solution where every player plays at most the *ideal* number
-        # of games.
-        status = self.model.optimize()
-        if status != OptimizationStatus.OPTIMAL:
-            print(status)
-            raise RuntimeError("Error while solving the problem. Maybe the "
-                               "constraints where unsatisfiable?")
-
-        # We want to improve the obtained solution so that each player can play
-        # up to the maximal number of games.
-        # But first, we are going to set the found solution in stone so that a
-        # player `p` that was assigned an activity `a` is still assigned that
-        # activity.
-        for v in self.vars.values():
-            v.lb = v.x
-
-        # Then, we are going to increase the limits for the number of activity.
-        for p in self.players:
-            self.nb_activities[p].ub = p.max_activities
-
         status = self.model.optimize()
         if status != OptimizationStatus.OPTIMAL:
             print(status)
@@ -231,7 +226,7 @@ class Matcher:
                                "constraints where unsatisfiable?")
 
         res = MatchResult(self.players, self.activities, result_name)
-        for (p, a), v in self.vars.items():
+        for (p, a), v in self.plays.items():
             if v.x >= 0.9:
                 res.add(p, a)
         return res

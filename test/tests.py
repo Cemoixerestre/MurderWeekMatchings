@@ -4,7 +4,7 @@ from datetime import datetime
 
 import sys
 sys.path.append('src')
-from base import TimeSlot, get_available_players, print_dispos
+from base import TimeSlot, get_available_players, print_dispos, BlacklistKind
 from matcher import Matcher, exponential_coef
 from loader import set_year, load_activities_and_players, \
         generate_timeslot_from_column_name, generate_timeslots_from_column_names
@@ -154,3 +154,35 @@ def test_orga_player_same_day():
     # "A magical party".
     kyoko = matcher.find_player_by_name("Kyoko Sakura")
     assert len(res.activities[kyoko]) == 0
+
+def test_orga_player_consecutive_days():
+    set_year("2024")
+    activities, players = load_activities_and_players(
+            Path('format_standard_activites.csv'),
+            Path('test/test-input/extra-choices-inscriptions'))
+
+    natsuhi = matcher.find_player_by_name("Natsuhi")
+
+    matcher = Matcher(players, activities)
+
+    res = matcher.solve(verbose=True)
+    res.print_players_status()
+    res.print_activities_status()
+
+def test_orga_player_consecutive_days():
+    set_year("2024")
+    activities, players = load_activities_and_players(
+            Path('format_standard_activites.csv'),
+            Path('test/test-input/extra-choices-inscriptions.csv'))
+
+    natsuhi = [p for p in players if p.name == "Natsuhi"][0]
+    rosa = [p for p in players if p.name == "Rosa"][0]
+    eva = [p for p in players if p.name == "Eva"][0]
+
+    eva.blacklist[BlacklistKind.DONT_PLAY_WITH].add(natsuhi)
+    matcher = Matcher(players, activities)
+    res = matcher.solve(verbose=True)
+    res.print_players_status()
+    res.print_activities_status()
+    # Eva can play "Meta Murder" as long as we choose Rosa instead of Natsuhi
+    assert len(res.activities[eva]) == 2

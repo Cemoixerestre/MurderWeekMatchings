@@ -70,11 +70,7 @@ La méthode `r0.compare(r1)` permet de comparer deux affectations `r0` et `r1`. 
 
 ## Description de l'algorithme
 
-Le cœur de l'algorithme est un algorithme de d'optimisation linéaire. Le fait qu'un·e joueureuse $j$ joue une activité $a$ est représenté par une variable linéaire $v_{j, a} \in \{0, 1\}$, le nombre de jeux d'un·e joueureuse $j$ est représenté par une variable $n_j$ et le nombre de joueureuses participant à une activité $a$ est représenté par une variable $n_a$. L'ensemble des contraintes (limites de joueureuses par activité, limites de jeux par joueureuses, contraintes temporelles, blacklists) sont traduites en contraintes linéaires entre les $v_{j, a}$, $n_j$ et $n_a$. La fonction que nous essayons de maximiser est :
-$$\sum_{j, a} \frac{1}{r(j, a)} v_{j, a}$$
-Avec le rang de l'activité $a$ dans le classement de læ joueureuse $j$.
-
-Afin de tenir compte du nombre idéal d'activités donnés par certain·es joueureuses, qui peut-être inférieur au nombre maximal, la recherche d'une solution se fait en deux temps. Dans la première passe d'assignation, on affecte un maximum d'activités aux joueureuses dans la limite des nombres *idéaux* d'activité. La deuxième passe affecte des activités aux joueureuses qui ont atteint leur nombre idéal d'activité, mais dans la limite de leur nombre *maximal* d'activité.
+Le cœur de l'algorithme est un algorithme de d'optimisation linéaire. Le fait qu'un·e joueureuse $j$ joue une activité $a$ est représenté par une variable linéaire $v_{j, a} \in \{0, 1\}$, le nombre de jeux d'un·e joueureuse $j$ est représenté par une variable $n_j$ et le nombre de joueureuses participant à une activité $a$ est représenté par une variable $n_a$. L'ensemble des contraintes (limites de joueureuses par activité, limites de jeux par joueureuses, contraintes temporelles, blacklists) sont traduites en contraintes linéaires entre les $v_{j, a}$, $n_j$ et $n_a$. Nous essayons de maximiser la somme des valeur des jeux joués, avec comme valeur l'inverse du rang du jeu dans le classement de læ joueureuses (1 pour un vœu n°1, $$\frac{1}{2}$$ pour un jeu n°2, $$\frac{1}{3}$$ pour un jeu n°3, etc.). À noter que le nombre de jeu idéal est pris en compte. Si un·e joueureuse demande idéalement trois jeux, les jeux au-delà du troisième seront comptés avec une valeur plus faible.
 
 Il est possible d'ajouter des contraintes supplémentaires, afin par exemple :
 - De s'assure qu'un·e joueureuse joue un jeu donné.

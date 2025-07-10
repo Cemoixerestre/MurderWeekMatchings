@@ -186,6 +186,9 @@ class Player:
         for bl_kind, names in self.blacklist_names.items():
             for name in names:
                 other = find_player_by_name(name, players)
+                if other is None:
+                    raise ValueError(f"Invalid player name: {name}. "
+                                     f"Found in the blacklist of player {self.name}")
                 self.blacklist[bl_kind].add(other)
 
     def filter_availability(self, verbose:bool = False) -> None:

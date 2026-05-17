@@ -21,10 +21,7 @@ class MatchResult:
             {p:[] for p in players}
         self.refused: Dict[Player, List[str]] = \
             {p: p.ranked_activity_names.copy() for p in players}
-        self.unavailable: Dict[Player, List[str]] = \
-            {p:list(set(p.initial_activity_names) - set(p.ranked_activity_names))
-             for p in players}
-        
+
         self.nb_players = len(players)
         self.nb_activities = len(activities)
         # Number of remaining slots for each activities
@@ -201,6 +198,43 @@ class MatchResult:
 
             writer.writerow(row)
 
+    def write_removed_to_csv(self,
+                             writer: csv.writer,
+                             players: List[Player],
+                             row_name: str,
+                             disp_dates=True,
+                             disp_rank=True) -> None:
+        """Print the games that are removed (because of unavailability, organization constraint or blacklist) for each player."""
+        names: Dict[Player, List[str]] = {}
+        reasons: Dict[Player, List[RemovalReason]] = {}
+        for p in players:
+            names[p] = []
+            reasons[p] = []
+            for act, rs in p.removed_wishes.items():
+                assert len(rs) > 0
+                names[p].extend([act] + [""] * (len(rs) - 1))
+                reasons[p].extend(list(rs))
+
+        max_names = max(len(ns) for ns in names.values())
+        for i in range(max_names):
+            row = [row_name]
+            row_name = ""
+            for p in players:
+                if i >= len(names[p]):
+                    row.append("")
+                    if disp_dates:
+                        row.append("")
+                    continue
+                name = names[p][i]
+                if disp_rank and name != "":
+                    row.append(p.name_with_rank(name))
+                else:
+                    row.append(name)
+                if disp_dates:
+                    row.append(reasons[p][i])
+
+            writer.writerow(row)
+
     def export_players_to_csv(self,
                               filename: str,
                               disp_orga=True,
@@ -220,7 +254,7 @@ class MatchResult:
                 if disp_dates:
                     row.append("")
             writer.writerow(row)
-            
+
             row = ["Nombre d'activités"]
             for p in players:
                 row.append(f"{len(self.activities[p])}/{p.ideal_activities}, "
@@ -229,7 +263,7 @@ class MatchResult:
                     row.append("")
             writer.writerow(row)
             writer.writerow([])
-            
+
             self.write_activities_to_csv(writer, players, "Activités",
                                          self.activities, disp_dates, disp_rank)
             if disp_orga:
@@ -243,8 +277,8 @@ class MatchResult:
                                         self.refused, disp_dates, disp_rank)
             if disp_unavailable:
                 writer.writerow([])
-                self.write_names_to_csv(writer, players, "Indisponibilités",
-                                        self.unavailable, disp_dates, disp_rank)
+                self.write_removed_to_csv(writer, players, "Vœux retirés",
+                                          disp_dates, disp_rank)
         print(f"Successfully wrote to the file {filename}")
 
     def compare(self, other: MatchResult):

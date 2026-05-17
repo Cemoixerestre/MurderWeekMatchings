@@ -183,6 +183,6 @@ def load_activities_and_players(act_path: Path, players_path: Path, verbose=True
     for player in players:
         if verbose:
             print(f"Processed player {player.name}")
-        player.filter_availability(verbose=verbose)
+        player.filter_activities(verbose=verbose)
  
     return (activities, players)

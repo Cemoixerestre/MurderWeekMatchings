@@ -4,8 +4,43 @@ from typing import List, Dict, Optional, Tuple, Set
 from datetime import datetime, timedelta
 from warnings import warn
 from enum import Enum, Flag, auto
+from dataclasses import dataclass
+from collections import defaultdict
 
 WEEK_DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+
+# Gives the reasons why an activity has been removed from the wishes of a player
+@dataclass(unsafe_hash=True)
+class RemovalUnavailable:
+    """The player is unavailable when the activity is played."""
+
+    def __str__(self):
+        return "indisponible"
+
+@dataclass(unsafe_hash=True)
+class RemovalBlacklist:
+    """The player has a constraint with at least one organizer of the activity."""
+
+    def __str__(self):
+        return "blacklist orga"
+
+@dataclass(unsafe_hash=True)
+class RemovalOrganization:
+    """The player has a conflicting organization."""
+    activity: Activity
+
+    def __str__(self):
+        return f"orga ({self.activity.name})"
+
+@dataclass(unsafe_hash=True)
+class RemovalNoSlot:
+    """No slot for this game in the activity file."""
+
+    def __str__(self):
+        return f"aucun créneau"
+
+RemovalReason = RemovalUnavailable | RemovalBlacklist | \
+                RemovalOrganization | RemovalNoSlot
 
 class TimeSlot:
     def __init__(self, start: datetime, end: datetime, name: Option[str]=None):
@@ -18,7 +53,7 @@ class TimeSlot:
           start.
         - Optional: a representation "name". It is used for columns extracted
           from the inscription file. The goal is to display
-          "Lundi 24/08 matin" instead of "24/08 08:00-13:00". 
+          "Lundi 24/08 matin" instead of "24/08 08:00-13:00".
         """
         self.start = start
         self.end = end
@@ -165,8 +200,9 @@ class Player:
         # Blacklists sets are empty, and will be replaced later by players.
         self.blacklist: Dict[BlacklistKind, Set[Player]] = \
                         {bl_kind:set() for bl_kind in BlacklistKind}
-        # Will be replaced later by activities.
+        # Will be filled later with activities.
         self.organizing: List[Activity] = []
+        self.removed_wishes: Dict[str, Set[RemovalReason]] = {}
 
     def populate_wishes(self, activities: List[Activity]) -> None:
         """
@@ -179,6 +215,7 @@ class Player:
             if act == []:
                 warn(f"Could not find activity {act_name} in the activity list. "
                       "Check your activity file.")
+                self.removed_wishes[act_name] = {RemovalNoSlot()}
             else:
                 self.wishes.extend(act)
 
@@ -191,7 +228,7 @@ class Player:
                                      f"Found in the blacklist of player {self.name}")
                 self.blacklist[bl_kind].add(other)
 
-    def filter_availability(self, verbose:bool = False) -> None:
+    def filter_activities(self, verbose:bool = False) -> None:
         """Function called at the beginning to filter impossible wishes.
 
         It filters out wishes where the player in unavailable, when it
@@ -202,52 +239,52 @@ class Player:
         This procedure is called once after the initialization of players
         and activities.
         """
+        removed_activities = defaultdict(list)
         if Constraints.PLAY_ORGA_SAME_DAY in self.constraints:
-            activity_when_orga = [a for a in self.wishes for o in self.organizing
+            activity_when_orga = [(a, o) for a in self.wishes for o in self.organizing
                                   if a.date() == o.date()]
             if verbose and activity_when_orga:
                 print("Found wishes and activities the same day :")
-                for a in set(activity_when_orga):
+                for a, _ in set(activity_when_orga):
                     print(f"- {a}")
 
-            for a in set(activity_when_orga):
-                self.wishes.remove(a)
+            for a, o in activity_when_orga:
+                removed_activities[a].append(RemovalOrganization(o))
 
         if Constraints.PLAY_ORGA_TWO_CONSECUTIVE_DAYS in self.constraints:
-            activity_orga_consecutive = {a for a in self.wishes
+            activity_orga_consecutive = {(a, o) for a in self.wishes
                                          for o in self.organizing
                                          if abs(a.date() - o.date()).days <= 1}
             if verbose and activity_orga_consecutive:
                 print("Found wishes and activities on consecutive days :")
-                for a in activity_orga_consecutive:
+                for a, _ in activity_orga_consecutive:
                     print(f"- {a}")
 
-            for a in activity_orga_consecutive:
-                self.wishes.remove(a)
+            for a, o in activity_orga_consecutive:
+                removed_activities[a].append(RemovalOrganization(o))
 
-        organizing = [a for a in self.wishes for o in self.organizing
+        organizing = [(a, o) for a in self.wishes for o in self.organizing
                        if a.overlaps(o.timeslot)]
         if verbose and organizing:
             print("Found wishes when organizing :")
             for a in set(organizing):
                 print(f"- {a}")
 
-        for a in set(organizing):
-            self.wishes.remove(a)
+        for a, o in organizing:
+            removed_activities[a].append(RemovalOrganization(o))
 
         conflicting = [a for a in self.wishes
-                       for (slot, available) in self.availability.items()
-                       if a.overlaps(slot) and not available]
+                       if any(a.overlaps(s) and not available
+                              for (s, available) in self.availability.items())]
         if verbose and conflicting:
             print("Found wishes where not available :")
             for a in set(conflicting):
                 print(f"- {a}")
-        for a in set(conflicting):
-            self.wishes.remove(a)
+        for a in conflicting:
+            removed_activities[a].append(RemovalUnavailable())
 
         # Blacklist constraint when the player does not want to play with an
         # organizer.
-        blacklisted_wishes = []
         for w in self.wishes:
             blacklisted_orgas = set(self.blacklist[BlacklistKind.DONT_BE_ORGANIZED_BY])
             blacklisted_orgas &= set(w.orgas)
@@ -255,13 +292,11 @@ class Player:
                 if verbose:
                     print(f'- Wish "{w}" removed because the game is organized '
                           f'by blacklisted organizers: {blacklisted_orgas}')
-                blacklisted_wishes.append(w)
-        for w in set(blacklisted_wishes):
-            self.wishes.remove(w)
+                removal = RemovalBlacklist()
+                removed_activities[w].append(removal)
 
-        # Blacklist constraints when an organizer does not want to play with a
-        # player.
-        blacklisted_wishes = []
+        # Blacklist constraints when an organizer does not want to play with
+        # the player.
         for w in self.wishes:
             blacklisting_orgas = [orga for orga in w.orgas
                                   if self in orga.blacklist[BlacklistKind.DONT_ORGANIZE_FOR]]
@@ -269,16 +304,26 @@ class Player:
                 if verbose:
                     print(f'- Wish "{w}" removed because the game is organized '
                           f'by blacklisted organizers: {blacklisting_orgas}')
-                blacklisted_wishes.append(w)
-        for w in set(blacklisted_wishes):
-            self.wishes.remove(w)
+                removal = RemovalBlacklist()
+                removed_activities[w].append(removal)
 
-        # Clearing up activity names only to keep those where the player is
-        # available:
+        # Removing unavailabilities and clearing up activity names.
+        for a in removed_activities:
+            self.wishes.remove(a)
         for w in self.wishes:
             if self.ranked_activity_names == [] or \
                self.ranked_activity_names[-1] != w.name:
                 self.ranked_activity_names.append(w.name)
+        # Storing the reasons why every activity has been removed.
+        for w in set(self.initial_activity_names) - set(self.ranked_activity_names):
+            removal_reasons = sum(
+                [r for a, r in removed_activities.items() if a.name == w],
+                start=[])
+            if removal_reasons == []:
+                assert self.removed_wishes[w] == {RemovalNoSlot()}
+                continue
+            assert w not in self.removed_wishes
+            self.removed_wishes[w] = set(removal_reasons)
 
     def name_with_rank(self, name: str) -> str:
         """Return the name of an activity along with its rank.
